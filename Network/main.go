@@ -1,9 +1,9 @@
 package main
 
 import (
-	"./network/bcast"
-	"./network/localip"
-	"./network/peers"
+	"./bcast"
+	"./localip"
+	"./peers"
 	"flag"
 	"fmt"
 	"os"
