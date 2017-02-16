@@ -45,6 +45,7 @@ func main() {
 	peerTxEnable := make(chan bool)
 	go peers.Transmitter(10808, id, peerTxEnable)
 	go peers.Receiver(10808, peerUpdateCh)
+
 	//15647
 	// We make channels for sending and receiving our custom data types
 	helloTx := make(chan HelloMsg)
@@ -54,6 +55,7 @@ func main() {
 	//  start multiple transmitters/receivers on the same port.
 	go bcast.Transmitter(30008, helloTx)
 	go bcast.Receiver(30008, helloRx)
+
 	// 16569
 	// The example message. We just send one of these every second.
 	go func() {
