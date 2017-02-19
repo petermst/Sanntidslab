@@ -146,5 +146,3 @@ int elev_get_obstruction_signal(void) {
 
 
 
-
-
