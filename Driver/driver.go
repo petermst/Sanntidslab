@@ -1,7 +1,7 @@
 package Driver
 
 import (
-	//"fmt"
+	"fmt"
 	//"os"
 	"time"
 )
@@ -24,7 +24,7 @@ const (
 	DOOR_OPEN  = 1
 )
 
-type buttonIndicator struct {
+type ButtonIndicator struct {
 	floor  int
 	button int
 	value  int
@@ -32,55 +32,55 @@ type buttonIndicator struct {
 
 var lastFloorIndicator int = -1
 
-var lampChannelMatrix = [N_FLOORS][N_BUTTONS]int{
-	{LIGHT_UP1, LIGHT_DOWN1, LIGHT_COMMAND1},
-	{LIGHT_UP2, LIGHT_DOWN2, LIGHT_COMMAND2},
-	{LIGHT_UP3, LIGHT_DOWN3, LIGHT_COMMAND3},
-	{LIGHT_UP4, LIGHT_DOWN4, LIGHT_COMMAND4},
-}
+var lampSetChannelMatrix = [N_FLOORS][N_BUTTONS]int{}
 
-var buttonChannelMatrix = [N_FLOORS][N_BUTTONS]int{
-	{BUTTON_UP1, BUTTON_DOWN1, BUTTON_COMMAND1},
-	{BUTTON_UP2, BUTTON_DOWN2, BUTTON_COMMAND2},
-	{BUTTON_UP3, BUTTON_DOWN3, BUTTON_COMMAND3},
-	{BUTTON_UP4, BUTTON_DOWN4, BUTTON_COMMAND4},
-}
-
-func RunDriver(setButtonLamp <-chan buttonIndicator, setMotorDirection <-chan int, startDoorTimer <-chan bool) {
+func RunDriver(setButtonIndicator chan ButtonIndicator, setMotorDirection <-chan int, startDoorTimer <-chan bool) {
 
 	checkTicker := time.NewTicker(5 * time.Millisecond).C
 
 	for {
 		select {
 		case <-checkTicker:
-			checkButtonsPressed()
+			checkButtonsPressed(setButtonIndicator)
 
 			//HUSK!!! returnerer ElevGetFloorSensorSignal()
-		case lamp := <-setButtonLamp:
+		case lamp := <-setButtonIndicator:
+			fmt.Println("et eller anna")
 			ElevSetButtonLamp(lamp.button, lamp.floor, lamp.value)
 		case dir := <-setMotorDirection:
 			ElevSetMotorDirection(dir)
 		case <-startDoorTimer:
 			setDoor(DOOR_OPEN)
-		case <-doorTimer:
-			setDoor(DOOR_CLOSE)
+			doorTimer := time.NewTimer(time.Second * 3)
+			go func() {
+				<-doorTimer.C
+				setDoor(DOOR_CLOSE)
+			}()
 		}
 	}
 }
 
-func checkButtonsPressed() {
-	for floor := 0; floor < NUM_FLOORS; floor++ {
-		for button := 0; button < NUM_BUTTONS; button++ {
-			if ElevGetButtonSignal(button, floor) && !buttonChannelMatrix[floor][button] {
+func checkButtonsPressed(setButtonIndicator chan<- ButtonIndicator) {
+	for floor := 0; floor < N_FLOORS; floor++ {
+		for button := 0; button < N_BUTTONS; button++ {
+			if (ElevGetButtonSignal(button, floor) == 1) && (lampSetChannelMatrix[floor][button] == 0) {
 				// Sette calcOptimalElevator-channel
-				buttonChannelMatrix[floor][button] = ElevGetButtonSignal(button, floor)
+				lampSetChannelMatrix[floor][button] = ElevGetButtonSignal(button, floor)
+
+				var but ButtonIndicator
+				but.floor = floor
+				but.button = button
+				but.value = 1
+				fmt.Printf("%d\n", but.button)
+				setButtonIndicator <- but
+				fmt.Println("3333")
 			}
 		}
 	}
 }
 
 func checkFloorArrival() {
-	curFloorIndicator = ElevGetFloorSensorSignal()
+	curFloorIndicator := ElevGetFloorSensorSignal()
 	if curFloorIndicator != -1 && lastFloorIndicator == -1 {
 		ElevSetFloorIndicator(curFloorIndicator)
 		//Sette eventAtFloor-channel
@@ -90,7 +90,4 @@ func checkFloorArrival() {
 
 func setDoor(doorOpen int) {
 	ElevSetDoorOpenLamp(doorOpen)
-	if doorOpen {
-		doorTimer := time.NewTimer(time.Second * 3).C
-	}
 }

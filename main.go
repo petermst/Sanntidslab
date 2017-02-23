@@ -4,7 +4,7 @@ import (
 	. "./Driver"
 	"fmt"
 	"os"
-	"time"
+	//"time"
 )
 
 func main() {
@@ -14,12 +14,12 @@ func main() {
 
 	ElevSetMotorDirection(0)
 
-	setButtonLamp := make(chan buttonIndicator)
+	setButtonLamp := make(chan ButtonIndicator)
 	setMotorDirection := make(chan int)
 	startDoorTimer := make(chan bool)
 	//doorTimer := make(chan time.Time)
 
-	RunDriver(setButtonLamp, setMotorDirection, startDoorTimer)
+	go RunDriver(setButtonLamp, setMotorDirection, startDoorTimer)
 
 	for {
 		// Change direction when we reach top/bottom floor
