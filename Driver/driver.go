@@ -34,19 +34,18 @@ var lastFloorIndicator int = -1
 
 var lampSetChannelMatrix = [N_FLOORS][N_BUTTONS]int{}
 
-func RunDriver(setButtonIndicator chan ButtonIndicator, setMotorDirection <-chan int, startDoorTimer <-chan bool) {
+func RunDriver(setButtonIndicator chan ButtonIndicator, setMotorDirection <-chan int, startDoorTimer <-chan bool, eventElevatorStuck chan<- bool, eventAtFloor chan<- int, eventDoorTimeout chan<- bool) {
 
 	checkTicker := time.NewTicker(5 * time.Millisecond).C
 
 	for {
+
 		select {
+		case lamp := <-setButtonIndicator:
+			ElevSetButtonLamp(lamp.button, lamp.floor, lamp.value)
 		case <-checkTicker:
 			checkButtonsPressed(setButtonIndicator)
-
-			//HUSK!!! returnerer ElevGetFloorSensorSignal()
-		case lamp := <-setButtonIndicator:
-			fmt.Println("et eller anna")
-			ElevSetButtonLamp(lamp.button, lamp.floor, lamp.value)
+			checkFloorArrival(eventAtFloor)
 		case dir := <-setMotorDirection:
 			ElevSetMotorDirection(dir)
 		case <-startDoorTimer:
@@ -55,6 +54,7 @@ func RunDriver(setButtonIndicator chan ButtonIndicator, setMotorDirection <-chan
 			go func() {
 				<-doorTimer.C
 				setDoor(DOOR_CLOSE)
+				eventDoorTimeout <- true
 			}()
 		}
 	}
@@ -64,30 +64,44 @@ func checkButtonsPressed(setButtonIndicator chan<- ButtonIndicator) {
 	for floor := 0; floor < N_FLOORS; floor++ {
 		for button := 0; button < N_BUTTONS; button++ {
 			if (ElevGetButtonSignal(button, floor) == 1) && (lampSetChannelMatrix[floor][button] == 0) {
+
 				// Sette calcOptimalElevator-channel
 				lampSetChannelMatrix[floor][button] = ElevGetButtonSignal(button, floor)
-
 				var but ButtonIndicator
 				but.floor = floor
 				but.button = button
 				but.value = 1
-				fmt.Printf("%d\n", but.button)
 				setButtonIndicator <- but
-				fmt.Println("3333")
 			}
 		}
 	}
 }
 
-func checkFloorArrival() {
+func checkFloorArrival(eventAtFloor chan<- int) {
 	curFloorIndicator := ElevGetFloorSensorSignal()
 	if curFloorIndicator != -1 && lastFloorIndicator == -1 {
 		ElevSetFloorIndicator(curFloorIndicator)
-		//Sette eventAtFloor-channel
+		eventAtFloor <- curFloorIndicator
 	}
 	lastFloorIndicator = curFloorIndicator
 }
 
 func setDoor(doorOpen int) {
 	ElevSetDoorOpenLamp(doorOpen)
+}
+
+func InitializeElevator() int {
+	ElevInit()
+	ElevSetMotorDirection(-1)
+	var initfloor int
+	for {
+		initfloor = ElevGetFloorSensorSignal()
+		if initfloor != -1 {
+			ElevSetMotorDirection(0)
+			lastFloorIndicator = initfloor
+			fmt.Println("\nDriver successfully initialized\n")
+			return -1
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }

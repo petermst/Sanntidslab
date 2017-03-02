@@ -2,24 +2,33 @@ package main
 
 import (
 	. "./Driver"
+	. "./FSM"
 	"fmt"
 	"os"
 	//"time"
 )
 
 func main() {
-	ElevInit() //Skal stå
+	InitializeElevator() //Skal stå
 
 	fmt.Println("Press STOP button to stop elevator and exit program.\n")
 
 	ElevSetMotorDirection(0)
 
-	setButtonLamp := make(chan ButtonIndicator)
-	setMotorDirection := make(chan int)
-	startDoorTimer := make(chan bool)
+	setButtonIndicator := make(chan ButtonIndicator, 1) //Driver <- Queue
+	setMotorDirection := make(chan int, 1)              //Driver <- FSM
+	startDoorTimer := make(chan bool, 1)                //Driver <- FSM
+	eventElevatorStuck := make(chan bool, 1)            //FSM <- Driver
+	eventAtFloor := make(chan int, 1)                   //FSM <- Driver
+	eventDoorTimeout := make(chan bool, 1)              //FSM <- Driver
+	nextDirection := make(chan int, 1)                  //FSM <- Queue
+	shouldStop := make(chan int, 1)                     //Queue <- FSM
+	getNextDirection := make(chan bool, 1)              //Queue <- FSM
+	elevatorStuckUpdateQueue := make(chan bool, 1)      //Queue <- FSM
 	//doorTimer := make(chan time.Time)
 
-	go RunDriver(setButtonLamp, setMotorDirection, startDoorTimer)
+	go RunDriver(setButtonIndicator, setMotorDirection, startDoorTimer, elevatorStuck, eventAtFloor, eventDoorTimeout)
+	go RunFSM(setMotorDirection, startDoorTimer, elevatorStuck, eventAtFloor, nextDir, shouldStop, getNextDirection, elevatorStuckUpdateQueue)
 
 	for {
 		// Change direction when we reach top/bottom floor
