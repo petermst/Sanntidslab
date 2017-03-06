@@ -1,12 +1,11 @@
 package Driver
 
 import (
+	. "../Queue"
 	"fmt"
 	//"os"
 	"time"
 )
-
-type motorDirection int
 
 const (
 	N_BUTTONS = 3
@@ -14,7 +13,7 @@ const (
 )
 
 const (
-	MOTOR_DOWN motorDirection = -1
+	MOTOR_DOWN int = -1
 	MOTOR_IDLE
 	MOTOR_UP
 )
@@ -38,6 +37,9 @@ func RunDriver(setButtonIndicator chan ButtonIndicator, setMotorDirection <-chan
 
 	checkTicker := time.NewTicker(5 * time.Millisecond).C
 
+	elevatorStuckTimer := time.NewTimer(10 * time.Second)
+	elevatorStuckTimer.Stop()
+
 	for {
 
 		select {
@@ -48,13 +50,25 @@ func RunDriver(setButtonIndicator chan ButtonIndicator, setMotorDirection <-chan
 			checkFloorArrival(eventAtFloor)
 		case dir := <-setMotorDirection:
 			ElevSetMotorDirection(dir)
+			if dir != 0{
+				elevatorStuckTimer.Reset(10* time.Second)
+			}
 		case <-startDoorTimer:
 			setDoor(DOOR_OPEN)
 			doorTimer := time.NewTimer(time.Second * 3)
+			
+			var update QueueOperation
+			update.operation = false
+			update.floor = ElevGetFloorSensorSignal()
+			update.elevator = 
+			updateQueue <- update
+
 			go func() {
 				<-doorTimer.C
 				setDoor(DOOR_CLOSE)
 				eventDoorTimeout <- true
+		case <- elevatorStuckTimer.C:
+			eventElevatorStuck <- true
 			}()
 		}
 	}
@@ -81,7 +95,7 @@ func checkFloorArrival(eventAtFloor chan<- int) {
 	curFloorIndicator := ElevGetFloorSensorSignal()
 	if curFloorIndicator != -1 && lastFloorIndicator == -1 {
 		ElevSetFloorIndicator(curFloorIndicator)
-		eventAtFloor <- curFloorIndicator
+		//eventAtFloor <- curFloorIndicator
 	}
 	lastFloorIndicator = curFloorIndicator
 }
@@ -98,6 +112,7 @@ func InitializeElevator() int {
 		initfloor = ElevGetFloorSensorSignal()
 		if initfloor != -1 {
 			ElevSetMotorDirection(0)
+			ElevSetFloorIndicator(ElevGetFloorSensorSignal())
 			lastFloorIndicator = initfloor
 			fmt.Println("\nDriver successfully initialized\n")
 			return -1

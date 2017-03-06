@@ -9,28 +9,19 @@ import (
 	"time"
 )
 
-type updateMessage struct {
-	Content string
-	id      string
+type isAliveMessage struct {
+	lastFloor int
+	direction int
 }
 
-type orderMessage struct {
-	id     string
-	botton int
+type updateQueueMessage struct {
+	operation bool
+	elevator  int
+	floor     int
+	button    int
 }
 
-func runNetwork(incomingMSG chan<- message, outgoingMSG <-chan message) {
-
-	//make elevator id
-	var id string
-	if id == "" {
-		localIP, err := localip.LocalIP()
-		if err != nil {
-			fmt.Println(err)
-			localIP = "DISCONNECTED"
-		}
-		id = fmt.Sprintf("peer-%s-%d", localIP, os.Getpid())
-	}
+func runNetwork(elevatorID string, incomingMSG chan<- message, outgoingMSG <-chan message) {
 
 	//make channel for receiving peer updates
 	peerUpdateCh := make(chan peers.PeerUpdate)
@@ -39,22 +30,25 @@ func runNetwork(incomingMSG chan<- message, outgoingMSG <-chan message) {
 	peerTxEnable := make(chan bool)
 
 	//goroutines for receiving and transmitting peerupdates
-	go peers.Transmitter(10808, id, peerTxEnable)
+	go peers.Transmitter(10808, elevatorID, peerTxEnable)
 	go peers.Receiver(10808, peerUpdateCh)
 
 	//channels for sending and receiving custom data types, message for queueupdate
-	Tx := make(chan message)
-	Rx := make(chan message)
+	IsAliveT := make(chan isAliveMessage)
+	IsaliveR := make(chan isAliveMessage)
+
+	updateT := make(chan updateQueueMessage)
+	updateR := make(chan updateQueueMessage)
 
 	//goroutines for transmitting and receiving custom data types
-	go bcast.Transmitter(30008, Tx)
-	go bcast.Receiver(30008, Rx)
+	go bcast.Transmitter(30008, IsAliveT, updateT)
+	go bcast.Receiver(30008, IsaliveR, updateR)
 
 	//function that iteratively sends a message to tell other elevators that it lives
 	go func() {
 		//Update elevators on the network
-		updateMSG := message{"Jeg er en heis", 0}
-		updateMSG.id = id
+		updateMSG := isAliveMessage{, 0}
+		updateMSG.id = elevatorID
 		for {
 			Tx <- updateMSG
 			time.Sleep(time.Second)
@@ -71,7 +65,6 @@ func runNetwork(incomingMSG chan<- message, outgoingMSG <-chan message) {
 			fmt.Printf("  Lost:     %q\n", peerUpdate.Lost)
 		case newMSG := <-Rx:
 			receiveMessage(newMSG, incomingMSG)
-
 		case Tx := <-outgoingMSG:
 
 		}
@@ -81,4 +74,21 @@ func runNetwork(incomingMSG chan<- message, outgoingMSG <-chan message) {
 
 func receiveMessage(Message message, incomingMSG <-chan message) {
 
+}
+
+func sendMessage(Message) {
+
+}
+
+func InitializeNetwork() string {
+	var id string
+	if id == "" {
+		localIP, err := localip.LocalIP()
+		if err != nil {
+			fmt.Println(err)
+			localIP = "DISCONNECTED"
+		}
+		id = fmt.Sprintf("peer-%s-%d", localIP, os.Getpid())
+	}
+	return id
 }
