@@ -1,15 +1,13 @@
-package main
+package Network
 
 import (
-	"./bcast"
-	"./localip"
-	"./peers"
 	"fmt"
 	"os"
 	"time"
 )
 
-type isAliveMessage struct {
+type driverState struct {
+	id        string
 	lastFloor int
 	direction int
 }
@@ -21,33 +19,34 @@ type updateQueueMessage struct {
 	button    int
 }
 
-func runNetwork(elevatorID string, incomingMSG chan<- message, outgoingMSG <-chan message) {
+func runNetwork(elevatorID string, updatePeersOnQueue chan<- driverState, incomingMSG chan<- message, outgoingMSG <-chan message, transmitUpdate <-chan driverState) {
+
+	var lastFloor = -1
+	var direction = -1
 
 	//make channel for receiving peer updates
-	peerUpdateCh := make(chan peers.PeerUpdate)
+	peerUpdateCh := make(chan PeerUpdate)
 
 	//make channel for enableling transmitter for peer update
 	peerTxEnable := make(chan bool)
 
 	//goroutines for receiving and transmitting peerupdates
-	go peers.Transmitter(10808, elevatorID, peerTxEnable)
-	go peers.Receiver(10808, peerUpdateCh)
+	go TransmitterPeers(10808, elevatorID, peerTxEnable, transmitUpdate)
+	go ReceiverPeers(10808, peerUpdateCh, updatePeersOnQueue)
 
 	//channels for sending and receiving custom data types, message for queueupdate
-	IsAliveT := make(chan isAliveMessage)
-	IsaliveR := make(chan isAliveMessage)
 
-	updateT := make(chan updateQueueMessage)
-	updateR := make(chan updateQueueMessage)
+	updateTransmit := make(chan updateQueueMessage)
+	updateReceive := make(chan updateQueueMessage)
 
 	//goroutines for transmitting and receiving custom data types
-	go bcast.Transmitter(30008, IsAliveT, updateT)
-	go bcast.Receiver(30008, IsaliveR, updateR)
+	go TransmitterBcast(30008, updateTransmit)
+	go ReceiverBcast(30008, updateReceive)
 
 	//function that iteratively sends a message to tell other elevators that it lives
 	go func() {
 		//Update elevators on the network
-		updateMSG := isAliveMessage{, 0}
+		updateMSG := driverState{, 0}
 		updateMSG.id = elevatorID
 		for {
 			Tx <- updateMSG
@@ -63,8 +62,8 @@ func runNetwork(elevatorID string, incomingMSG chan<- message, outgoingMSG <-cha
 			fmt.Printf("  Peers:    %q\n", peerUpdate.Peers)
 			fmt.Printf("  New:      %q\n", peerUpdate.New)
 			fmt.Printf("  Lost:     %q\n", peerUpdate.Lost)
-		case newMSG := <-Rx:
-			receiveMessage(newMSG, incomingMSG)
+		case newIsAlive := <- IsaliveR:
+			receiveMessage(newIsAlive, incomingMSG)
 		case Tx := <-outgoingMSG:
 
 		}
@@ -72,7 +71,7 @@ func runNetwork(elevatorID string, incomingMSG chan<- message, outgoingMSG <-cha
 
 }
 
-func receiveMessage(Message message, incomingMSG <-chan message) {
+func receiveIsAlive(Message driverState, incomingMSG <-chan message) {
 
 }
 

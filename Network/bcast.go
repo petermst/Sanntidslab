@@ -1,7 +1,6 @@
-package bcast
+package Network
 
 import (
-	"../conn"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -11,7 +10,7 @@ import (
 
 // Encodes received values from `chans` into type-tagged JSON, then broadcasts
 // it on `port`
-func Transmitter(port int, chans ...interface{}) {
+func TransmitterBcast(port int, chans ...interface{}) {
 	checkArgs(chans...)
 
 	n := 0
@@ -29,7 +28,7 @@ func Transmitter(port int, chans ...interface{}) {
 		typeNames[i] = reflect.TypeOf(ch).Elem().String()
 	}
 
-	conn := conn.DialBroadcastUDP(port)
+	conn := DialBroadcastUDP(port)
 	addr, _ := net.ResolveUDPAddr("udp4", fmt.Sprintf("255.255.255.255:%d", port))
 	for {
 		chosen, value, _ := reflect.Select(selectCases)
@@ -40,11 +39,11 @@ func Transmitter(port int, chans ...interface{}) {
 
 // Matches type-tagged JSON received on `port` to element types of `chans`, then
 // sends the decoded value on the corresponding channel
-func Receiver(port int, chans ...interface{}) {
+func ReceiverBcast(port int, chans ...interface{}) {
 	checkArgs(chans...)
 
 	var buf [1024]byte
-	conn := conn.DialBroadcastUDP(port)
+	conn := DialBroadcastUDP(port)
 	for {
 		n, _, _ := conn.ReadFrom(buf[0:])
 		for _, ch := range chans {

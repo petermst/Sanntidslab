@@ -1,4 +1,4 @@
-package localip
+package Network
 
 import (
 	"net"

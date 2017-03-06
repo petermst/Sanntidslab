@@ -38,7 +38,7 @@ func main() {
 	}
 
 	// We make a channel for receiving updates on the id's of the peers that are
-	//  alive on the network
+	// alive on the network
 	peerUpdateCh := make(chan peers.PeerUpdate)
 	// We can disable/enable the transmitter after it has been started.
 	// This could be used to signal that we are somehow "unavailable".

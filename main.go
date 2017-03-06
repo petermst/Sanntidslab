@@ -3,6 +3,7 @@ package main
 import (
 	. "./Driver"
 	. "./FSM"
+	. "./Network"
 	"fmt"
 	"os"
 	//"time"
@@ -26,16 +27,16 @@ func main() {
 	//nextDirection := make(chan int, 1)                  //FSM <- Queue
 	//shouldStop := make(chan int, 1)                     //Queue <- FSM
 	//getNextDirection := make(chan bool, 1)              //Queue <- FSM
-	elevatorStuckUpdateQueue := make(chan bool, 1) //Queue <- FSM
-	updateQueue := make(chan QueueOperation, 1)    //Queue <- FSM
-	calcOptimalElevator := make(chan Order, 1)     //Queue <- Driver
-	//updatePeersOnQueue := make(chan ) //Queue <- Network
+	elevatorStuckUpdateQueue := make(chan bool, 1)  //Queue <- FSM
+	updateQueue := make(chan QueueOperation, 1)     //Queue <- FSM
+	calcOptimalElevator := make(chan Order, 1)      //Queue <- Driver
+	updatePeersOnQueue := make(chan driverState, 1) //Queue <- Network
 	//incomingMSG := make(chan ) //Queue <- Network
 	//messageSent := make(chan ) //Queue <- Network
 
 	go RunDriver(setButtonIndicator, setMotorDirection, startDoorTimer, elevatorStuckUpdateQueue, eventAtFloor, eventDoorTimeout)
 	go RunFSM(setMotorDirection, startDoorTimer, elevatorStuck, eventAtFloor, nextDir, shouldStop, getNextDirection, elevatorStuckUpdateQueue)
-	go RunNetwork(id)
+	go RunNetwork(id, updatePeersOnQueue)
 	for {
 		// Change direction when we reach top/bottom floor
 		/*if ElevGetFloorSensorSignal() == (4 - 1) {
