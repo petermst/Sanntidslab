@@ -37,6 +37,7 @@ func main() {
 	go RunDriver(setButtonIndicator, setMotorDirection, startDoorTimer, elevatorStuckUpdateQueue, eventAtFloor, eventDoorTimeout)
 	go RunFSM(setMotorDirection, startDoorTimer, elevatorStuck, eventAtFloor, nextDir, shouldStop, getNextDirection, elevatorStuckUpdateQueue)
 	go RunNetwork(id, updatePeersOnQueue)
+
 	for {
 		// Change direction when we reach top/bottom floor
 		/*if ElevGetFloorSensorSignal() == (4 - 1) {

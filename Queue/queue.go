@@ -7,11 +7,11 @@ import (
 	"time"
 )
 
-var n_elevators := 1
+var n_elevators = 1
 
 type QueueOperation struct {
 	operation bool
-	elevator int
+	elevator  int
 	floor     int
 }
 
@@ -20,9 +20,22 @@ type Order struct {
 	button int
 }
 
-func RunQueue() {
+type QueueMap struct {
+	mux   sync.Mutex
+	queue map[string][][]bool
+}
 
-	queue := initializeQueue()
+func RunQueue(id string) {
+	tempQueue = make([][]bool, N_FLOORS)
+	for i := range tempQueue {
+		tempQueue[i] = make([]bool, N_BUTTONS)
+	}
+
+	queue := QueueMap{queue: make(map[string][][]bool)}
+	queue[id] = tempQueue
+
+	driverstates := make(map[string][]int)
+	driverstates[id] = [2]int{1, 0}
 
 	for {
 		select {
@@ -32,28 +45,16 @@ func RunQueue() {
 	}
 }
 
-func initializeQueue() ([][][]*bool){
-	
-	queue := make([][][]*bool,n_elevators)
-
-	for i := n_elevators{
-		queue[i] = make([][]*bool,N_FLOORS)
-		for j := range queue[i]{
-			queue[i][j] = make([]*bool,N_BUTTONS)
-			for k :=  range queue[i][j]{
-				queue[i][j][k] = false
-			}
-		}
-	}
-	return queue
-}
-
 func incomingMSG() {
 
 }
 
-func updateQueue(queue [][][]*bool, operation QueueOperation) {
-	for i := range queue[][]	
+func updateQueue(operation QueueOperation) {
+
+}
+
+func updateQueueSize() {
+
 }
 
 func shouldStop() {

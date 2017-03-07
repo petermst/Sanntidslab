@@ -72,7 +72,7 @@ func runNetwork(elevatorID string, updatePeersOnQueue chan<- driverState, incomi
 }
 
 func receiveIsAlive(Message driverState, incomingMSG <-chan message) {
-
+	
 }
 
 func sendMessage(Message) {
