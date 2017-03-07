@@ -35,6 +35,7 @@ func TransmitterBcast(port int, chans ...interface{}) {
 		buf, _ := json.Marshal(value.Interface())
 		conn.WriteTo([]byte(typeNames[chosen]+string(buf)), addr)
 	}
+
 }
 
 // Matches type-tagged JSON received on `port` to element types of `chans`, then

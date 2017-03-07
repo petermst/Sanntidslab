@@ -19,7 +19,12 @@ type updateQueueMessage struct {
 	button    int
 }
 
-func runNetwork(elevatorID string, updatePeersOnQueue chan<- driverState, incomingMSG chan<- message, outgoingMSG <-chan message, transmitUpdate <-chan driverState) {
+type NewOrLostPeer struct{
+	id string
+	isNew bool
+}
+
+func runNetwork(elevatorID string, updatePeersOnQueue chan<- driverState, updateQueueSize chan<- NewOrLostPeer, incomingMSG chan<- message, outgoingMSG <-chan message, transmitUpdate <-chan driverState) {
 
 	var lastFloor = -1
 	var direction = -1
@@ -58,10 +63,7 @@ func runNetwork(elevatorID string, updatePeersOnQueue chan<- driverState, incomi
 	for {
 		select {
 		case peerUpdate := <-peerUpdateCh:
-			fmt.Printf("Peer update:\n")
-			fmt.Printf("  Peers:    %q\n", peerUpdate.Peers)
-			fmt.Printf("  New:      %q\n", peerUpdate.New)
-			fmt.Printf("  Lost:     %q\n", peerUpdate.Lost)
+			updateNumberOfPeers(peerUpdate, updateQueueSize)
 		case newIsAlive := <- IsaliveR:
 			receiveMessage(newIsAlive, incomingMSG)
 		case Tx := <-outgoingMSG:
@@ -90,4 +92,23 @@ func InitializeNetwork() string {
 		id = fmt.Sprintf("peer-%s-%d", localIP, os.Getpid())
 	}
 	return id
+}
+
+
+func updateNumberOfPeers(peerUpdate PeerUpdate, updateQueueSize chan<- NewOrLostPeer) {
+	p NewOrLostPeer
+	for i := range peerUpdate.Lost {
+		p.id = peerUpdate[i]
+		p.isNew = false
+		updateQueueSize <- p
+	}
+	if peerUpdate.New != ""{
+		p.id = peerUpdate.New
+		p.isNew = true 
+		updateQueueSize <- p
+	}
+	fmt.Printf("Peer update:\n")
+	fmt.Printf("  Peers:    %q\n", peerUpdate.Peers)
+	fmt.Printf("  New:      %q\n", peerUpdate.New)
+	fmt.Printf("  Lost:     %q\n", peerUpdate.Lost)
 }

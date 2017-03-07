@@ -2,6 +2,7 @@ package FSM
 
 import (
 	. "./Driver"
+	. "./Queue"
 	"fmt"
 	"os"
 	"time"
@@ -16,7 +17,7 @@ const (
 	STATE_STUCK
 )
 
-func RunFSM(setMotorDirection chan int, startDoorTimer chan bool, eventElevatorStuck chan<- bool, eventAtFloor <-chan int, eventDoorTimeout <-chan bool, nextDirection <-chan int, shouldStop chan<- int, getNextDirection chan<- bool, elevatorStuckUpdateQueue chan<- bool) {
+func RunFSM(id string, setMotorDirection chan int, startDoorTimer chan bool, eventElevatorStuck chan<- bool, eventAtFloor <-chan int, eventDoorTimeout <-chan bool, nextDirection <-chan []int, shouldStop chan<- int, getNextDirection chan<- bool, elevatorStuckUpdateQueue chan<- bool, updateQueue chan<- QueueOperation) {
 	state := STATE_IDLE
 
 	for {
@@ -26,9 +27,9 @@ func RunFSM(setMotorDirection chan int, startDoorTimer chan bool, eventElevatorS
 			//elevatorStuckUpdateQueue <- true
 		case floor := <-eventAtFloor:
 			eventAtFloor(state, floor, shouldStop)
-		case direction <- nextDirection:
-			state = eventNewDirection(state, direction, startDoorTimer, setMotorDirection)
-			setMotorDirection <- direction
+		case directionAndFloor <- nextDirection:
+			state = eventNewDirection(id, state, directionAndFloor, startDoorTimer, setMotorDirection)
+			setMotorDirection <- directionAndFloor[0]
 		case <-eventDoorTimeout:
 			state = eventDoorTimeout()
 			getNextDirection <- true
@@ -56,16 +57,16 @@ func eventDoorTimeout() State {
 	}
 }
 
-func eventNewDirection(state State, direction int, startDoorTimer chan<- bool, setMotorDirection chan<- int) State {
+func eventNewDirection(id string, state State, directionAndFloor []int, startDoorTimer chan<- bool, setMotorDirection chan<- int) State {
 	switch state {
 	case STATE_MOVING:
 	case STATE_IDLE:
-		if direction == 0 {
-			setMotorDirection <- direction
+		if directionAndFloor[0] == 0 {
 			startDoorTimer <- true
+			QueOpe := QueueOperation{false, id, directionAndFloor[1], 0}
+			updateQueue <- QueOpe
 			return STATE_DOOR_OPEN
 		} else {
-			setMotorDirection <- direction
 			return STATE_MOVING
 		}
 	default:

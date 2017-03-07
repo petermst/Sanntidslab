@@ -40,8 +40,8 @@ func TransmitterPeers(port int, id string, transmitEnable <-chan bool, transmitU
 	for {
 		select {
 		case enable = <-transmitEnable:
-		case <-time.After(interval):
 		case currentDriverState = <-transmitUpdate:
+		case <-time.After(interval):
 		}
 		if enable {
 			chosen, value, _ := reflect.Select(selectCases)
@@ -89,7 +89,6 @@ func ReceiverPeers(port int, peerUpdateCh chan<- PeerUpdate, updatePeersOnQueue 
 				p.New = message.id
 				updated = true
 			}
-
 			lastSeen[message.id] = time.Now()
 		}
 
