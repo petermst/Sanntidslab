@@ -11,7 +11,7 @@ import (
 var n_elevators = 1
 
 type QueueOperation struct {
-	operation 	bool
+	isAddOrder 	bool
 	elevatorId  string
 	floor     	int
 	button 		int
@@ -29,7 +29,7 @@ type QueueMap struct {
 
 
 
-func RunQueue(id string, updateQueue <-chan QueueOperation, updateQueueSize <-chan NewOrLostPeer, shouldStop <-chan int, setButtonIndicator chan ButtonIndicator, outgoingMessage chan<- QueueOperation) {
+func RunQueue(id string, updateQueue <-chan QueueOperation, updateQueueSize <-chan NewOrLostPeer, shouldStop <-chan int, setButtonIndicator chan ButtonIndicator, incomingMessage <-chan QueueOperation, outgoingMessage chan<- QueueOperation, messageSent <-chan QueueOperation, nextDirection chan []int, getNextDirection <-chan bool) {
 
 	tempQueue = make([][]bool, N_FLOORS)
 	for i := range tempQueue {
@@ -41,54 +41,55 @@ func RunQueue(id string, updateQueue <-chan QueueOperation, updateQueueSize <-ch
 
 	//First is floor, second is direction
 	driverStates := make(map[string][]int)
-	driverStates[id] = [2]int{1, 0}
+	driverStates[id] = [2]int{1, -1}
 
 
 	for {
 		select {
-		case operation <- updateQueue:
-			updateQueue(operation, queue)
-			outgoingMessage <- operation
-		case peer <- updateQueueSize:
-			updateQueueSize(queue, peer)
-		case receivedMessage <- incomingMSG:
-			updateQueue(operation, receivedMessage)
-			
-		case Messagesent <- :
-
+		case outgoingMessage <- updateQueue:
+		case peer := <- updateQueueSize:
+			updateQueueSize(queue, driverStates, peer)
+		case receivedMessageOperation := <- incomingMSG:
+			updateQueue(receivedMessageOperation, queue)
+			updateButtonIndicators(id,receivedMessageOperation,setButtonIndicator)
+		case sentMessageOperation := <- messageSent:
+			updateQueue(sentMessageOperation,queue)
+			updateButtonIndicators(id,sentMessageOperation,setButtonIndicator)
+		case floor := <- shouldStop:
+			shouldStop(id, floor, queue, driverStates, nextDirection)
+		case <-getNextDirection:
+			nextDirection()
 		}
 	}
-}
-
-func incomingMSG() {
-
 }
 
 func updateQueue(operation QueueOperation, queue map[string][][]bool) {
-	if operation.operation {
-		queue[operation.elevatorId][operation.floor][operation.button] = operation.operation
-	} 
+	if operation.isAddOrder {
+		queue[operation.elevatorId][operation.floor][operation.button] = operation.isAddOrder
+	}
 	else {
 		for i := range queue[operation.elevatorId][operation.floor] {
-			queue[operation.elevatorId][operation.floor][i] = operation.operation
+			queue[operation.elevatorId][operation.floor][i] = operation.isAddOrder
 		}
 	}
 }
 
-func updateQueueSize(queue map[string][][]bool, peer NewOrLostPeer) {
+func updateQueueSize(queue map[string][][]bool, driverStates map[string][]int, peer NewOrLostPeer) {
 
 	if peer.isNew{
-		tempQueue = make([][]bool, N_FLOORS)
+		tempQueue := make([][]bool, N_FLOORS)
+		tempDriveState := make([]int,)
 		for i := range tempQueue {
 			tempQueue[i] = make([]bool, N_BUTTONS)
 		}
 		queue[peer.id] = tempQueue
+		driverStates[peer.id] = [2]int{1, -1}
 	}
 	else{
 
 		//Redistribute orders here
-
-		delete(queue,peer.id)
+		delete(driverStates, peer.id)
+		delete(queue, peer.id)
 	}
 }
 
@@ -102,29 +103,48 @@ func shouldStop(id string,floor int, queue map[string][][]bool, driverStates map
 	}
 }
 
-func updateButtonIndicators(operation QueueOperation, setButtonIndicator chan<- ButtonIndicator) {
-	if operation.operation {
-		setButtonIndicator <- ButtonIndicator{operation.floor, operation.button, 1}
+func updateButtonIndicators(id string, operation QueueOperation, setButtonIndicator chan<- ButtonIndicator) {
+	if operation.isAddOrder {
+		if (operation.button!=2) {
+			setButtonIndicator <- ButtonIndicator{operation.floor, operation.button, 1}
+		}
+		else{
+			if operation.id == id {
+				setButtonIndicator <- ButtonIndicator{operation.floor, operation.button, 1}
+			}
+		}
 	}
 	else{
-		for i := 0; i < 2; i++{
-			setButtonIndicator <- ButtonIndicator{operation.floor, i, 0}
+		if operation.button != 2 {
+			setButtonIndicator <- ButtonIndicator{operation.floor,0,0}
+			setButtonIndicator <- ButtonIndicator{operation.floor,1,0}
+		}
+		else{
+			setButtonIndicator <- ButtonIndicator{operation.floor, operation.button, 0}
 		}
 	}
 }
 
-func calculateElevator() {
+func calculateOptimalElevator(id string, queue map[string][][]bool, elevatorStates map[string][]int, order Order,outgoingMessage chan<- QueueOperation) {
+	var lowestCost int = 1000
+	var lowestCostID string
+	if order.button == 2 {
+		outgoingMessage <- QueueOperation{true, id, order.floor, order.button}
+	}
+	else if order.button == 1 {
+		for key,list := range queue {
+			tempCost := 0
+			if ((driverStates[key][1] == 1)&&(driverStates[key][0]) < order.floor)||((driverStates[key][1] == -1)&&(driverStates[key][0]) > order.floor) {
+				tempCost = driverStates[key][1]*(order.floor-driverStates[key][0])
+			}
+			else {
 
+			}
+		}
+	}
 }
 
-func nextDirection() {
-
+func nextDirection(id string, queue map[string][][]bool, elevatorStates map[string][]int) {
+	
 }
 
-func backupQueue() {
-
-}
-
-func restoreBackup() {
-
-}

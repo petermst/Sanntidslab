@@ -45,6 +45,7 @@ func RunDriver(setButtonIndicator chan ButtonIndicator, setMotorDirection <-chan
 		select {
 		case lamp := <-setButtonIndicator:
 			ElevSetButtonLamp(lamp.button, lamp.floor, lamp.value)
+			lampSetChannelMatrix[lamp.floor][lamp.button] = lamp.value
 		case <-checkTicker:
 			checkButtonsPressed(setButtonIndicator)
 			checkFloorArrival(eventAtFloor)
@@ -74,18 +75,11 @@ func RunDriver(setButtonIndicator chan ButtonIndicator, setMotorDirection <-chan
 	}
 }
 
-func checkButtonsPressed(setButtonIndicator chan<- ButtonIndicator) {
+func checkButtonsPressed(calcOptimalElevator  chan<- Order) {
 	for floor := 0; floor < N_FLOORS; floor++ {
 		for button := 0; button < N_BUTTONS; button++ {
 			if (ElevGetButtonSignal(button, floor) == 1) && (lampSetChannelMatrix[floor][button] == 0) {
-
-				// Sette calcOptimalElevator-channel
-				lampSetChannelMatrix[floor][button] = ElevGetButtonSignal(button, floor)
-				var but ButtonIndicator
-				but.floor = floor
-				but.button = button
-				but.value = 1
-				setButtonIndicator <- but
+				calcOptimalElevator <- Order{floor, button}
 			}
 		}
 	}

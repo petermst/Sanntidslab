@@ -10,7 +10,7 @@ import (
 
 // Encodes received values from `chans` into type-tagged JSON, then broadcasts
 // it on `port`
-func TransmitterBcast(port int, chans ...interface{}) {
+func TransmitterBcast(port int, messageSent chan<- QueueOperation, chans ...interface{}) {
 	checkArgs(chans...)
 
 	n := 0
@@ -34,6 +34,7 @@ func TransmitterBcast(port int, chans ...interface{}) {
 		chosen, value, _ := reflect.Select(selectCases)
 		buf, _ := json.Marshal(value.Interface())
 		conn.WriteTo([]byte(typeNames[chosen]+string(buf)), addr)
+		messageSent <- value.Interface()
 	}
 
 }
