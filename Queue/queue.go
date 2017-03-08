@@ -125,23 +125,38 @@ func updateButtonIndicators(id string, operation QueueOperation, setButtonIndica
 	}
 }
 
-func calculateOptimalElevator(id string, queue map[string][][]bool, elevatorStates map[string][]int, order Order,outgoingMessage chan<- QueueOperation) {
+func calculateOptimalElevator(id string, queue map[string][][]bool, elevatorStates map[string][]int, order Order, outgoingMessage chan<- QueueOperation) {
 	var lowestCost int = 1000
 	var lowestCostID string
+	n_moves := N_FLOORS-1
 	if order.button == 2 {
-		outgoingMessage <- QueueOperation{true, id, order.floor, order.button}
+		lowestCostID = id
 	}
 	else if order.button == 1 {
-		for key,list := range queue {
+		for elevID,list := range queue {
+			curFloor := driverStates[elevID][0]
+			curDir := driverStates[elevID][1]
 			tempCost := 0
-			if ((driverStates[key][1] == 1)&&(driverStates[key][0]) < order.floor)||((driverStates[key][1] == -1)&&(driverStates[key][0]) > order.floor) {
-				tempCost = driverStates[key][1]*(order.floor-driverStates[key][0])
+			if ((curDir == order.button+1) {
+				if (curDir*(order.floor-curfloor) > 0) {
+					tempCost = curDir*(order.floor-curfloor)
+				}
+				else {
+					tempCost = 2*n_moves + curDir*(order.floor-curfloor)
+				}
+			}
+			else if (curDir == order.button-2){
+				tempCost = (curDir+1)*n_moves - curDir*(curFloor + order.floor)
 			}
 			else {
-
+				//FEIL!!
+			}
+			if tempCost < lowestCost {
+				lowestCostID = elevID
 			}
 		}
 	}
+	outgoingMessage <- QueueOperation{true, lowestCostID, order.floor, order.button}
 }
 
 func nextDirection(id string, queue map[string][][]bool, elevatorStates map[string][]int) {
