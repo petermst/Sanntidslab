@@ -11,31 +11,40 @@ import (
 
 // Encodes received values from `chans` into type-tagged JSON, then broadcasts
 // it on `port`
-func TransmitterBcast(port int, messageSent chan<- QueueOperation, chans ...interface{}) {
+func TransmitterBcast(port int, messageSentCh chan<- QueueOperation, broadastTransmitMessageCh <-chan QueueOperation) {
+	messageToTransmit := make(chan QueueOperation,1)
+	n := 1
+	/*
 	checkArgs(chans...)
 
 	n := 0
 	for range chans {
 		n++
 	}
-
+	*/
 	selectCases := make([]reflect.SelectCase, n)
 	typeNames := make([]string, n)
+	selectCases[0] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(messageToTransmit)}
+	typeNames[0] = reflect.TypeOf(messageToTransmit).Elem().String()
+
+	/*
+	
 	for i, ch := range chans {
-		selectCases[i] = reflect.SelectCase{
-			Dir:  reflect.SelectRecv,
-			Chan: reflect.ValueOf(ch),
-		}
+		selectCases[i] = reflect.SelectCase{Dir:  reflect.SelectRecv, Chan: reflect.ValueOf(ch)}
 		typeNames[i] = reflect.TypeOf(ch).Elem().String()
 	}
+
+	*/
 
 	conn := DialBroadcastUDP(port)
 	addr, _ := net.ResolveUDPAddr("udp4", fmt.Sprintf("255.255.255.255:%d", port))
 	for {
+		message := <- broadastTransmitMessageCh
+		messageToTransmit <- message
 		chosen, value, _ := reflect.Select(selectCases)
 		buf, _ := json.Marshal(value.Interface())
 		conn.WriteTo([]byte(typeNames[chosen]+string(buf)), addr)
-		messageSent <- value.Interface()
+		messageSentCh <- message
 	}
 
 }

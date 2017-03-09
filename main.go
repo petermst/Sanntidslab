@@ -32,17 +32,17 @@ func main() {
 	getNextDirectionCh := make(chan bool, 1)              //Queue <- FSM
 	elevatorStuckUpdateQueueCh := make(chan bool, 1)      //Queue <- FSM
 	updateQueueCh := make(chan QueueOperation, 1)         //Queue <- FSM
-	updatePeersOnQueueCh := make(chan driverState, 1)     //Queue <- Network
+	updatePeersOnQueueCh := make(chan DriverState, 1)     //Queue <- Network
 	messageSentCh := make(chan QueueOperation, 1)         //Queue <- Network
 	updateQueueSizeCh := make(chan NewOrLostPeer, 1)      //Queue <- Network
-	incomingMSGCh := make(chan QueueOperation, 1)         //Queue <- Network
-	outgoingMSGCh := make(chan QueueOperation, 1)         //Network <- Queue
-	peersTransmitMSGCh := make(chan driverState, 1)       //Network <- Queue
+	incomingMessageCh := make(chan QueueOperation, 1)         //Queue <- Network
+	outgoingMessageCh := make(chan QueueOperation, 1)         //Network <- Queue
+	peersTransmitMessageCh := make(chan DriverState, 1)       //Network <- Queue
 
 	go RunDriver(id, setButtonIndicatorCh, setMotorDirectionCh, startDoorTimerCh, eventElevatorStuckCh, eventAtFloorCh, eventDoorTimeoutCh)
 	go RunFSM(id, setMotorDirectionCh, startDoorTimerCh, eventElevatorStuckCh, eventAtFloorCh, nextDirectionCh, shouldStopCh, getNextDirectionCh, elevatorStuckUpdateQueueCh, updateQueueCh)
-	go RunNetwork(id, updatePeersOnQueueCh, updateQueueSizeCh, incomingMSGCh, outgoingMSGCh, peersTransmitMSGCh, messageSentCh)
-	go RunQueue(id, calcOptimalElevatorCh, updateQueueCh, updateQueueSizeCh, shouldStopCh, setButtonIndicatorCh, incomingMSGCh, outgoingMSGCh, messageSentCh, nextDirectionCh, getNextDirectionCh, peersTransmitMSGCh, elevatorStuckUpdateQueueCh)
+	go RunNetwork(id, updatePeersOnQueueCh, updateQueueSizeCh, incomingMessageCh, outgoingMessageCh, peersTransmitMessageCh, messageSentCh)
+	go RunQueue(id, calcOptimalElevatorCh, updateQueueCh, updateQueueSizeCh, shouldStopCh, setButtonIndicatorCh, incomingMessageCh, outgoingMessageCh, messageSentCh, nextDirectionCh, getNextDirectionCh, peersTransmitMessageCh, elevatorStuckUpdateQueueCh)
 
 	for {
 		// Change direction when we reach top/bottom floor

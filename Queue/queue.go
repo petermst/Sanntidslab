@@ -2,187 +2,185 @@ package Queue
 
 import (
 	. "../Def"
-	"fmt"
+	//"fmt"
 	//"os"
-	"time"
+	//"time"
 )
 
 var n_elevators = 1
 
-func RunQueue(id string,calcOptimalElevator <-chan Order, updateQueue <-chan QueueOperation, updateQueueSize <-chan NewOrLostPeer, shouldStop <-chan int, setButtonIndicator chan ButtonIndicator, incomingMessage <-chan QueueOperation, outgoingMessage chan<- QueueOperation, messageSent <-chan QueueOperation, nextDirection chan []int, getNextDirection chan bool,  peersTransmitMSG chan driverState, elevatorStuck <-chan bool) {
+func RunQueue(id string, calcOptimalElevatorCh <-chan Order, updatePeersOnQueueCh <-chan DriverState, updateQueueCh chan QueueOperation, updateQueueSizeCh <-chan NewOrLostPeer, shouldStopCh <-chan int, setButtonIndicatorCh chan ButtonIndicator, incomingMessageCh <-chan QueueOperation, outgoingMessageCh chan<- QueueOperation, messageSentCh <-chan QueueOperation, nextDirectionCh chan []int, getNextDirectionCh chan bool,  peersTransmitMessageCh chan DriverState, elevatorStuckCh <-chan bool) {
 	inQueue := 0
 
-	tempQueue = make([][]bool, N_FLOORS)
+	tempQueue := make([][]bool, N_FLOORS)
 	for i := range tempQueue {
 		tempQueue[i] = make([]bool, N_BUTTONS)
 	}
-	queue.queue := QueueMap{queue: make(map[string][][]bool)}
-	queue.mux.Lock()
-	queue.queue[id] = tempQueue
-	queue.mux.Unlock()
+	queue := QueueMap{Queue: make(map[string][][]bool)}
+	queue.Mux.Lock()
+	queue.Queue[id] = tempQueue
+	queue.Mux.Unlock()
 
 	//First is floor, second is direction
-	driverStates := DriverStatesMap{states: make(map[string][]int)}
-	driverStates.mux.Lock()
-	driverStates.states[id] = []int{1, -1}
-	driverStates.mux.Unlock()
+	driverStates := DriverStatesMap{States: make(map[string][]int)}
+	driverStates.Mux.Lock()
+	driverStates.States[id] = []int{1, -1}
+	driverStates.Mux.Unlock()
 
 
 	for {
 		select {
-		case outgoingMessage <- updateQueueCh:
-		case peer := <- updateQueueSize:
+		case queueUpdateToSend := <- updateQueueCh:
+			outgoingMessageCh <- queueUpdateToSend
+		case peer := <- updateQueueSizeCh:
 			updateQueueSize(queue, driverStates, peer)
-		case receivedMessageOperation := <- incomingMSG:
-			updateQueue(id,receivedMessageOperation,queue,inQueue,getNextDirection)
-			updateButtonIndicators(id,receivedMessageOperation,setButtonIndicator)
-		case sentMessageOperation := <- messageSent:
-			updateQueue(id,sentMessageOperation,queue,inQueue,getNextDirection)
-			updateButtonIndicators(id,sentMessageOperation,setButtonIndicator)
-		case floor := <- shouldStop:
-			shouldStop(id, floor, queue, driverStates, nextDirection)
-			driverStates.mux.Lock()
-			driverStates.states[id][0] = floor
-			peersTransmitMSG <- driverState{id,floor,driverStates.states[id][1]}
-			driverStates.mux.Unlock()
-		case <-getNextDirection:
-			nextDirection(id, queue, driverStates, peersTransmitMSG, nextDirection)
-		case <- elevatorStuck:
-			driverStates.mux.Lock()
-			driverStates.states[id][0] = 100
-			peersTransmitMSG <- driverState{id, driverStates[id][0], driverStates[id][1]}
-			driverStates.mux.Unlock()
+		case receivedMessageOperation := <- incomingMessageCh:
+			updateQueue(id,receivedMessageOperation,queue,inQueue,getNextDirectionCh)
+			updateButtonIndicators(id,receivedMessageOperation,setButtonIndicatorCh)
+		case sentMessageOperation := <- messageSentCh:
+			updateQueue(id,sentMessageOperation,queue,inQueue,getNextDirectionCh)
+			updateButtonIndicators(id,sentMessageOperation,setButtonIndicatorCh)
+		case floor := <- shouldStopCh:
+			shouldStop(id, floor, queue, driverStates, nextDirectionCh)
+			driverStates.Mux.Lock()
+			driverStates.States[id][0] = floor
+			peersTransmitMessageCh <- DriverState{id,floor,driverStates.States[id][1]}
+			driverStates.Mux.Unlock()
+		case <-getNextDirectionCh:
+			nextDirection(id, queue, driverStates, peersTransmitMessageCh, nextDirectionCh)
+		case <- elevatorStuckCh:
+			driverStates.Mux.Lock()
+			driverStates.States[id][0] = 100
+			peersTransmitMessageCh <- DriverState{id, driverStates.States[id][0], driverStates.States[id][1]}
+			driverStates.Mux.Unlock()
 			//redistribute orders
-		case calc := <-calcOptimalElevator:
-			calculateOptimalElevator(id, driverStates, calc, outgoingMessage)
+		case calc := <-calcOptimalElevatorCh:
+			calculateOptimalElevator(id, driverStates, calc, outgoingMessageCh)
+		case updatedDriverState := <- updatePeersOnQueueCh:
+			driverStates.Mux.Lock()
+			driverStates.States[id][0] = updatedDriverState.LastFloor
+			driverStates.States[id][1] = updatedDriverState.Direction
+			driverStates.Mux.Unlock()
 		}
 	}
 }
 
-func updateQueue(id int, operation QueueOperation, queue QueueMap, inQueue int, getNextDirection chan<- bool) {
-	if operation.isAddOrder {
-		queue.mux.Lock()
-		queue.queue[operation.elevatorId][operation.floor][operation.button] = operation.isAddOrder
-		queue.mux.Unlock()
+func updateQueue(id string, operation QueueOperation, queue QueueMap, inQueue int, getNextDirectionCh chan<- bool) {
+	if operation.IsAddOrder {
+		queue.Mux.Lock()
+		queue.Queue[operation.ElevatorId][operation.Floor][operation.Button] = operation.IsAddOrder
+		queue.Mux.Unlock()
 		inQueue += 1
 		if inQueue == 1 {
-			getNextDirection <- true
+			getNextDirectionCh <- true
 		}
-	}
-	else {
-		for elevID,_ := range queue {
-			for i := 0; i < 2; i++  {
-				queue.mux.Lock()
-				if queue.queue[elevID][operation.floor][i] {
-					queue.queue[elevID][operation.floor][i] = operation.isAddOrder
+	} else {
+		for elevID,_ := range queue.Queue {
+			for i := 0; i < 2; i++ {
+				queue.Mux.Lock()
+				if queue.Queue[elevID][operation.Floor][i] {
+					queue.Queue[elevID][operation.Floor][i] = operation.IsAddOrder
 					if elevID == id {
 						inQueue -= 1
 					}
 				}
-				queue.mux.Unlock()
+				queue.Mux.Unlock()
 			}
 		}
-		queue.mux.Lock()
-		if queue.queue[operation.elevatorId][operation.floor][2] {
-			queue.queue[operation.elevatorId][operation.floor][2] = operation.isAddOrder
+		queue.Mux.Lock()
+		if queue.Queue[operation.ElevatorId][operation.Floor][2] {
+			queue.Queue[operation.ElevatorId][operation.Floor][2] = operation.IsAddOrder
 			inQueue -= 1
 		}
-		queue.mux.Unlock()
+		queue.Mux.Unlock()
 	}
 }
 
 func updateQueueSize(queue QueueMap, driverStates DriverStatesMap, peer NewOrLostPeer) {
-	if peer.isNew{
+	if peer.IsNew{
 		tempQueue := make([][]bool, N_FLOORS)
 		for i := range tempQueue {
 			tempQueue[i] = make([]bool, N_BUTTONS)
 		}
-		queue.mux.Lock()
-		queue.queue[peer.id] = tempQueue
-		queue.mux.Unlock()
-		driverStates.mux.Lock()
-		driverStates.states[peer.id] = []int{1, -1}
-		driverStates.mux.Unlock()
-	}
-	else{
+		queue.Mux.Lock()
+		queue.Queue[peer.Id] = tempQueue
+		queue.Mux.Unlock()
+		driverStates.Mux.Lock()
+		driverStates.States[peer.Id] = []int{1, -1}
+		driverStates.Mux.Unlock()
+	} else {
 		//Redistribute orders here
-		driverStates.mux.Lock()
-		delete(driverStates, peer.id)
-		driverStates.mux.Unlock()
-		queue.mux.Lock()
-		delete(queue, peer.id)
-		queue.mux.Unlock()
+		driverStates.Mux.Lock()
+		delete(driverStates.States, peer.Id)
+		driverStates.Mux.Unlock()
+		queue.Mux.Lock()
+		delete(queue.Queue, peer.Id)
+		queue.Mux.Unlock()
 	}
 }
 
-func shouldStop(id string, floor int, queue QueueMap, driverStates DriverStatesMap, nextDirection chan<- []int) {
-	driverStates.mux.Lock()
-	currentDirection := driverStates.states[id][1]
-	driverStates.mux.Unlock()
+func shouldStop(id string, floor int, queue QueueMap, driverStates DriverStatesMap, nextDirectionCh chan<- []int) {
+	driverStates.Mux.Lock()
+	currentDirection := driverStates.States[id][1]
+	driverStates.Mux.Unlock()
 	if currentDirection == -1 {
-		queue.mux.Lock()
-		if ((queue.queue[id][floor][2])||(queue.queue[id][floor][1])||(floor == 0)) {
-			nextDirection <- []int{0,floor}
+		queue.Mux.Lock()
+		if ((queue.Queue[id][floor][2])||(queue.Queue[id][floor][1])||(floor == 0)) {
+			nextDirectionCh <- []int{0,floor}
 		}
-		queue.mux.Unlock()
-	}
-	else{
-		queue.mux.Lock()
-		if ((queue.queue[id][floor][2])||(queue.queue[id][floor][0])||(floor == N_FLOORS-1)) {
-			nextDirection <- []int{0,floor}
+		queue.Mux.Unlock()
+	} else {
+		queue.Mux.Lock()
+		if ((queue.Queue[id][floor][2])||(queue.Queue[id][floor][0])||(floor == N_FLOORS-1)) {
+			nextDirectionCh <- []int{0,floor}
 		}
-		queue.mux.Unlock()
+		queue.Mux.Unlock()
 	}
 }
 
-func updateButtonIndicators(id string, operation QueueOperation, setButtonIndicator chan<- ButtonIndicator) {
-	if operation.isAddOrder {
-		if (operation.button!=2) {
-			setButtonIndicator <- ButtonIndicator{operation.floor, operation.button, 1}
+func updateButtonIndicators(id string, operation QueueOperation, setButtonIndicatorCh chan<- ButtonIndicator) {
+	if operation.IsAddOrder {
+		if operation.Button != 2 {
+			setButtonIndicatorCh <- ButtonIndicator{operation.Floor, operation.Button, 1}
+		} else {
+			if operation.ElevatorId == id {
+				setButtonIndicatorCh <- ButtonIndicator{operation.Floor, operation.Button, 1}
+			}
 		}
-		else{
-			if operation.id == id {
-				setButtonIndicator <- ButtonIndicator{operation.floor, operation.button, 1}
+	} else {
+		if operation.Button != 2 {
+			setButtonIndicatorCh <- ButtonIndicator{operation.Floor,0,0}
+			setButtonIndicatorCh <- ButtonIndicator{operation.Floor,1,0}
+		} else {
+			if operation.ElevatorId == id {
+				setButtonIndicatorCh <- ButtonIndicator{operation.Floor, operation.Button, 0}
 			}
 		}
 	}
-	else{
-		if operation.button != 2 {
-			setButtonIndicator <- ButtonIndicator{operation.floor,0,0}
-			setButtonIndicator <- ButtonIndicator{operation.floor,1,0}
-		}
-		else{
-			setButtonIndicator <- ButtonIndicator{operation.floor, operation.button, 0}
-		}
-	}
 }
 
-func calculateOptimalElevator(id string, driverStates DriverStatesMap, order Order, outgoingMessage chan<- QueueOperation) {
+func calculateOptimalElevator(id string, driverStates DriverStatesMap, order Order, outgoingMessageCh chan<- QueueOperation) {
 	var lowestCost int = 1000
 	var lowestCostID string
 	n_moves := N_FLOORS-1
-	if order.button == 2 {
+	if order.Button == 2 {
 		lowestCostID = id
-	}
-	else if order.button == 1 {
-		for elevID,list := range queue {
-			driverStates.mux.Lock()
-			curFloor := driverStates.states[elevID][0]
-			curDir := driverStates.states[elevID][1]
-			driverStates.mux.Unlock()
+	} else if order.Button == 1 {
+		for elevID,_ := range driverStates.States {
+			driverStates.Mux.Lock()
+			curFloor := driverStates.States[elevID][0]
+			curDir := driverStates.States[elevID][1]
+			driverStates.Mux.Unlock()
 			tempCost := 0
-			if ((curDir == order.button+1)||(curDir == order.button-2)) {
-				if (curDir*(order.floor-curfloor) > 0) {
-					tempCost = curDir*(order.floor-curfloor)
+			if ((curDir == order.Button+1)||(curDir == order.Button-2)) {
+				if (curDir*(order.Floor-curFloor) > 0) {
+					tempCost = curDir*(order.Floor-curFloor)
+				} else {
+					tempCost = 2*n_moves + curDir*(order.Floor-curFloor)
 				}
-				else {
-					tempCost = 2*n_moves + curDir*(order.floor-curfloor)
-				}
-			}
-			else if ((curDir == order.button)||(curDir == order.button-1)){
-				tempCost = (curDir+1)*n_moves - curDir*(curFloor + order.floor)
-			}
-			else {
+			} else if ((curDir == order.Button)||(curDir == order.Button-1)){
+				tempCost = (curDir+1)*n_moves - curDir*(curFloor + order.Floor)
+			} else {
 				//FEIL!!
 			}
 			if tempCost < lowestCost {
@@ -190,61 +188,58 @@ func calculateOptimalElevator(id string, driverStates DriverStatesMap, order Ord
 			}
 		}
 	}
-	outgoingMessage <- QueueOperation{true, lowestCostID, order.floor, order.button}
+	outgoingMessageCh <- QueueOperation{true, lowestCostID, order.Floor, order.Button}
 }
 
-func nextDirection(id string, queue QueueMap, driverStates DriverStatesMap, peersTransmitMSG chan<- driverState, nextDirection chan<- []int) {
-	driverStates.mux.Lock()
-	currentDirection := driverStates.states[id][1]
-	currentFloor := driverStates.states[id][0]
-	driverStates.mux.Unlock()
+func nextDirection(id string, queue QueueMap, driverStates DriverStatesMap, peersTransmitMessageCh chan<- DriverState, nextDirectionCh chan<- []int) {
+	driverStates.Mux.Lock()
+	currentDirection := driverStates.States[id][1]
+	currentFloor := driverStates.States[id][0]
+	driverStates.Mux.Unlock()
 	updateDirection := 5
 	if currentDirection == -1 {
-		for floor := currentFloor; floor >= 0; i-- {
-			for button := 0; i < N_BUTTONS; button++ {
-				queue.mux.Lock()
-				if queue.queue[id][floor][button] {
+		for floor := currentFloor; floor >= 0; floor-- {
+			for button := 0; button < N_BUTTONS; button++ {
+				queue.Mux.Lock()
+				if queue.Queue[id][floor][button] {
 					updateDirection = currentDirection
 				}
-				queue.mux.Unlock()
+				queue.Mux.Unlock()
 			}
 		}
-	}
-	else if currentDirection == 1 {
+	} else if currentDirection == 1 {
 		for floor := currentFloor; floor < N_FLOORS; floor++ {
 			for button := 0; button < N_BUTTONS; button++ {
-				queue.mux.Lock()
-				if queue.queue[id][floor][button] {
+				queue.Mux.Lock()
+				if queue.Queue[id][floor][button] {
 					updateDirection = currentDirection
 				}
-				queue.mux.Unlock()
+				queue.Mux.Unlock()
 			}
 		}
 	}
 	for floor := 0; floor < N_FLOORS; floor++ {
 		for button := 0; button < N_BUTTONS; button++ {
-			queue.mux.Lock()
-			if queue.queue[id][floor][button] {
+			queue.Mux.Lock()
+			if queue.Queue[id][floor][button] {
 				if floor < currentFloor {
 					updateDirection = -1
-				}
-				else if floor > currentFloor {
+				} else if floor > currentFloor {
 					updateDirection = 1
-				}
-				else if floor == currentFloor {
+				} else if floor == currentFloor {
 					updateDirection = 0
 				}
 			}
-			queue.mux.Unlock()
+			queue.Mux.Unlock()
 		}
 	}
 	if updateDirection != 5 {
 		if updateDirection != 0 {
-			driverStates.mux.Lock()
-			driverStates.states[id][1] = updateDirection
-			peersTransmitMSG <- driverState{id, driverStates[id][0], driverStates[id][1]}
-			driverStates.mux.Unlock()
+			driverStates.Mux.Lock()
+			driverStates.States[id][1] = updateDirection
+			peersTransmitMessageCh <- DriverState{id, driverStates.States[id][0], driverStates.States[id][1]}
+			driverStates.Mux.Unlock()
 		}
-		nextDirection <- []int{updateDirection, currentFloor}
+		nextDirectionCh <- []int{updateDirection, currentFloor}
 	}
 }

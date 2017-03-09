@@ -22,10 +22,10 @@ func RunDriver(id string, setButtonIndicatorCh chan ButtonIndicator, setMotorDir
 
 		select {
 		case lamp := <-setButtonIndicatorCh:
-			ElevSetButtonLamp(lamp.button, lamp.floor, lamp.value)
-			lampSetChannelMatrix[lamp.floor][lamp.button] = lamp.value
+			ElevSetButtonLamp(lamp.Button, lamp.Floor, lamp.Value)
+			lampSetChannelMatrix[lamp.Floor][lamp.Button] = lamp.Value
 		case <-checkTickerCh:
-			checkButtonsPressed(setButtonIndicator)
+			checkButtonsPressed(calcOptimalElevatorCh)
 			reached := checkFloorArrival(eventAtFloor)
 			if reached {
 				elevatorStuckTimer.Reset(10 * time.Second)

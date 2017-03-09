@@ -8,9 +8,9 @@ type State int
 
 const (
 	STATE_IDLE State = 0
-	STATE_MOVING
-	STATE_DOOR_OPEN
-	STATE_STUCK
+	STATE_MOVING State = 1
+	STATE_DOOR_OPEN State = 2
+	STATE_STUCK State = 3
 )
 
 const (
@@ -20,8 +20,8 @@ const (
 
 const (
 	MOTOR_DOWN int = -1
-	MOTOR_IDLE
-	MOTOR_UP
+	MOTOR_IDLE int = 0
+	MOTOR_UP int = 1
 )
 
 const (
@@ -29,43 +29,43 @@ const (
 	DOOR_OPEN      = 1
 )
 
-type driverState struct {
-	id        string
-	lastFloor int
-	direction int
+type DriverState struct {
+	Id        string
+	LastFloor int
+	Direction int
 }
 
 type NewOrLostPeer struct {
-	id    string
-	isNew bool
+	Id    string
+	IsNew bool
 }
 
 type ButtonIndicator struct {
-	floor  int
-	button int
-	value  int
+	Floor  int
+	Button int
+	Value  int
 }
 
 type QueueOperation struct {
-	isAddOrder bool
-	elevatorId string
-	floor      int
-	button     int
+	IsAddOrder bool
+	ElevatorId string
+	Floor      int
+	Button     int
 }
 
 type Order struct {
-	floor  int
-	button int
+	Floor  int
+	Button int
 }
 
 type QueueMap struct {
-	mux   sync.Mutex
-	queue map[string][][]bool
+	Mux   sync.Mutex
+	Queue map[string][][]bool
 }
 
 type DriverStatesMap struct {
-	mux    sync.Mutex
-	states map[string][]int
+	Mux    sync.Mutex
+	States map[string][]int
 }
 
 type PeerUpdate struct {

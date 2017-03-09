@@ -18,7 +18,7 @@ func RunFSM(id string, setMotorDirectionCh chan int, startDoorTimerCh chan bool,
 		case floor := <-eventAtFloorCh:
 			eventAtFloor(state, floor, shouldStopCh)
 		case directionAndFloor := <-nextDirectionCh:
-			state = eventNewDirection(id, state, directionAndFloor, startDoorTimerCh)
+			state = eventNewDirection(id, state, directionAndFloor, startDoorTimerCh, updateQueueCh)
 			setMotorDirectionCh <- directionAndFloor[0]
 		case <-eventDoorTimeoutCh:
 			state = eventDoorTimeout(state)
@@ -27,14 +27,14 @@ func RunFSM(id string, setMotorDirectionCh chan int, startDoorTimerCh chan bool,
 	}
 }
 
-func eventAtFloor(state State, floor int, shouldStopCh chan<- int) {
+func eventAtFloor(state State, floor int, shouldStopCh chan<- int) State {
 	switch state {
 	case STATE_MOVING:
 		shouldStopCh <- floor
 	default:
 		return state
 	}
-
+	return state
 }
 
 func eventDoorTimeout(state State) State {
@@ -47,14 +47,14 @@ func eventDoorTimeout(state State) State {
 	}
 }
 
-func eventNewDirection(id string, state State, directionAndFloor []int, startDoorTimerCh chan<- bool) State {
+func eventNewDirection(id string, state State, directionAndFloor []int, startDoorTimerCh chan<- bool, updateQueueCh chan<- QueueOperation) State {
 	switch state {
 	case STATE_MOVING:
 	case STATE_IDLE:
 		if directionAndFloor[0] == 0 {
 			startDoorTimerCh <- true
 			QueOpe := QueueOperation{false, id, directionAndFloor[1], 0}
-			updateQueue <- QueOpe
+			updateQueueCh <- QueOpe
 			return STATE_DOOR_OPEN
 		} else {
 			return STATE_MOVING
@@ -62,5 +62,5 @@ func eventNewDirection(id string, state State, directionAndFloor []int, startDoo
 	default:
 		return state
 	}
-
+	return state
 }

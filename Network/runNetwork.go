@@ -4,39 +4,38 @@ import (
 	. "../Def"
 	"fmt"
 	"os"
-	"time"
+	//"time"
 )
 
-func runNetwork(elevatorID string, updatePeersOnQueue chan<- driverState, updateQueueSize chan<- NewOrLostPeer, incomingMSG chan<- QueueOperation, outgoingMSG <-chan QueueOperation, peersTransmitMSG chan driverState, messageSent chan<- QueueOperation) {
-
-	var lastFloor = -1
-	var direction = -1
+func runNetwork(elevatorID string, updatePeersOnQueueCh chan<- DriverState, updateQueueSizeCh chan<- NewOrLostPeer, incomingMessageCh chan<- QueueOperation, outgoingMessageCh <-chan QueueOperation, peersTransmitMessageCh chan DriverState, messageSentCh chan<- QueueOperation) {
 
 	//make channel for receiving peer updates
 	peerUpdateCh := make(chan PeerUpdate)
 
 	//make channel for enableling transmitter for peer update
-	peerTxEnable := make(chan bool)
+	peerTxEnableCh := make(chan bool)
 
 	//goroutines for receiving and transmitting peerupdates
-	go TransmitterPeers(10808, elevatorID, peerTxEnable, peersTransmitMSG)
-	go ReceiverPeers(10808, peerUpdateCh, updatePeersOnQueue)
+	go TransmitterPeers(10808, elevatorID, peerTxEnableCh, peersTransmitMessageCh)
+	go ReceiverPeers(10808, peerUpdateCh, updatePeersOnQueueCh)
 
 	//channels for sending and receiving custom data types, message for queueupdate
 
-	broadcastTransmitMSG := make(chan QueueOperation)
-	broadcastReceiveMSG := make(chan QueueOperation)
+	broadcastTransmitMessageCh := make(chan QueueOperation)
+	broadcastReceiveMessageCh := make(chan QueueOperation)
 
 	//goroutines for transmitting and receiving custom data types
-	go TransmitterBcast(30008, messageSent, broadcastTransmitMSG)
-	go ReceiverBcast(30008, broadcastReceiveMSG)
+	go TransmitterBcast(30008, messageSentCh, broadcastTransmitMessageCh)
+	go ReceiverBcast(30008, broadcastReceiveMessageCh)
 
 	for {
 		select {
 		case peerUpdate := <-peerUpdateCh:
-			updateNumberOfPeers(peerUpdate, updateQueueSize)
-		case broadcastTransmitMSG <-outgoingMSG:
-		case incomingMSG <- broadcastReceiveMSG:
+			updateNumberOfPeers(peerUpdate, updateQueueSizeCh)
+		case messageGoingOut:= <- outgoingMessageCh:
+			broadcastTransmitMessageCh <- messageGoingOut
+		case messageGoingIn:= <- broadcastReceiveMessageCh:
+			incomingMessageCh <-messageGoingIn
 		}
 	}
 }
@@ -44,7 +43,7 @@ func runNetwork(elevatorID string, updatePeersOnQueue chan<- driverState, update
 func InitializeNetwork() string {
 	var id string
 	if id == "" {
-		localIP, err := localip.LocalIP()
+		localIP, err := LocalIP()
 		if err != nil {
 			fmt.Println(err)
 			localIP = "DISCONNECTED"
@@ -55,17 +54,17 @@ func InitializeNetwork() string {
 }
 
 
-func updateNumberOfPeers(peerUpdate PeerUpdate, updateQueueSize chan<- NewOrLostPeer) {
-	p NewOrLostPeer
+func updateNumberOfPeers(peerUpdate PeerUpdate, updateQueueSizeCh chan<- NewOrLostPeer) {
+	var p NewOrLostPeer
 	for i := range peerUpdate.Lost {
-		p.id = peerUpdate[i]
-		p.isNew = false
-		updateQueueSize <- p
+		p.Id = peerUpdate.Lost[i]
+		p.IsNew = false
+		updateQueueSizeCh <- p
 	}
 	if peerUpdate.New != ""{
-		p.id = peerUpdate.New
-		p.isNew = true 
-		updateQueueSize <- p
+		p.Id = peerUpdate.New
+		p.IsNew = true 
+		updateQueueSizeCh <- p
 	}
 	fmt.Printf("Peer update:\n")
 	fmt.Printf("  Peers:    %q\n", peerUpdate.Peers)

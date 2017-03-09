@@ -16,10 +16,10 @@ import (
 const interval = 10 * time.Millisecond
 const timeout = 50 * time.Millisecond
 
-func TransmitterPeers(port int, id string, transmitEnable <-chan bool, newPeerTransmitMSG  <-chan driverState) {
+func TransmitterPeers(port int, id string, transmitEnableCh <-chan bool, newPeerTransmitMessageCh <-chan DriverState) {
 	
-	currentDriverState := driverState{id,1,-1}
-	peerTransmitMSG := make(chan driverState)
+	currentDriverState := DriverState{id,1,-1}
+	peerTransmitMessageCh := make(chan DriverState)
 
 	conn := DialBroadcastUDP(port)
 	addr, _ := net.ResolveUDPAddr("udp4", fmt.Sprintf("255.255.255.255:%d", port))
@@ -27,22 +27,19 @@ func TransmitterPeers(port int, id string, transmitEnable <-chan bool, newPeerTr
 	selectCases := make([]reflect.SelectCase, 1)
 	typeNames := make([]string, 1)
 
-	selectCases[0] = reflect.SelectCase{
-		Dir: reflect.SelectRecv,
-		Chan: reflect.ValueOf(peerTransmitMSG)
-	}
-	typenames[0] = reflect.TypeOf(peerTransmitMSG).Elem().String()
+	selectCases[0] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(peerTransmitMessageCh)}
+	typeNames[0] = reflect.TypeOf(peerTransmitMessageCh).Elem().String()
 
 	enable := true
 
 	for {
 		select {
-		case enable = <-transmitEnable:
-		case currentDriverState = <- newPeerTransmitMSG:
+		case enable = <-transmitEnableCh:
+		case currentDriverState = <- newPeerTransmitMessageCh:
 		case <-time.After(interval):
 		}
 
-		peerTransmitMSG <- currentDriverState
+		peerTransmitMessageCh <- currentDriverState
 
 		if enable {
 			chosen, value, _ := reflect.Select(selectCases)
@@ -52,7 +49,7 @@ func TransmitterPeers(port int, id string, transmitEnable <-chan bool, newPeerTr
 	}
 }
 
-func ReceiverPeers(port int, peerUpdateCh chan<- PeerUpdate, updatePeersOnQueue chan<- driverState) {
+func ReceiverPeers(port int, peerUpdateCh chan<- PeerUpdate, updatePeersOnQueueCh chan<- DriverState) {
 
 	var buf [1024]byte
 	var p PeerUpdate
@@ -60,37 +57,36 @@ func ReceiverPeers(port int, peerUpdateCh chan<- PeerUpdate, updatePeersOnQueue 
 
 	conn := DialBroadcastUDP(port)
 
-	newMessage := make(chan driverState)
-	var message driverState
+	newMessageCh := make(chan DriverState)
 
 	for {
 		updated := false
 
 		conn.SetReadDeadline(time.Now().Add(interval))
 		n, _, _ := conn.ReadFrom(buf[0:])
-		T := reflect.TypeOf(newMessage).Elem()
+		T := reflect.TypeOf(newMessageCh).Elem()
 		typename := T.String()
-		if strings.HasPrefix(buf[:n], typename) {
+		if strings.HasPrefix(string(buf[:n])+"{", typename) {
 			v := reflect.New(T)
 			json.Unmarshal(buf[len(typename):n], v.Interface())
 
 			reflect.Select([]reflect.SelectCase{{
 				Dir:  reflect.SelectSend,
-				Chan: reflect.ValueOf(newMessage),
+				Chan: reflect.ValueOf(newMessageCh),
 				Send: reflect.Indirect(v),
 			}})
 		}
 
-		message <- newMessage
+		message := <- newMessageCh
 
 		// Adding new connection
 		p.New = ""
-		if message.id != "" {
-			if _, idExists := lastSeen[message.id]; !idExists {
-				p.New = message.id
+		if message.Id != "" {
+			if _, idExists := lastSeen[message.Id]; !idExists {
+				p.New = message.Id
 				updated = true
 			}
-			lastSeen[message.id] = time.Now()
+			lastSeen[message.Id] = time.Now()
 		}
 
 		// Removing dead connection
@@ -115,6 +111,6 @@ func ReceiverPeers(port int, peerUpdateCh chan<- PeerUpdate, updatePeersOnQueue 
 			sort.Strings(p.Lost)
 			peerUpdateCh <- p
 		}
-		updatePeersOnQueue <- message
+		updatePeersOnQueueCh <- message
 	}
 }
