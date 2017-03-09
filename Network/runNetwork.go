@@ -18,7 +18,7 @@ type NewOrLostPeer struct{
 	isNew bool
 }
 
-func runNetwork(elevatorID string, updatePeersOnQueue chan<- driverState, updateQueueSize chan<- NewOrLostPeer, incomingMSG chan<- QueueOperation, outgoingMSG <-chan QueueOperation, peersTransmitMSG <-chan driverState, messageSent chan<- QueueOperation) {
+func runNetwork(elevatorID string, updatePeersOnQueue chan<- driverState, updateQueueSize chan<- NewOrLostPeer, incomingMSG chan<- QueueOperation, outgoingMSG <-chan QueueOperation, peersTransmitMSG chan driverState, messageSent chan<- QueueOperation) {
 
 	var lastFloor = -1
 	var direction = -1
@@ -30,7 +30,7 @@ func runNetwork(elevatorID string, updatePeersOnQueue chan<- driverState, update
 	peerTxEnable := make(chan bool)
 
 	//goroutines for receiving and transmitting peerupdates
-	go TransmitterPeers(10808, elevatorID, peerTxEnable, transmitUpdate)
+	go TransmitterPeers(10808, elevatorID, peerTxEnable, peersTransmitMSG)
 	go ReceiverPeers(10808, peerUpdateCh, updatePeersOnQueue)
 
 	//channels for sending and receiving custom data types, message for queueupdate
@@ -46,18 +46,10 @@ func runNetwork(elevatorID string, updatePeersOnQueue chan<- driverState, update
 		select {
 		case peerUpdate := <-peerUpdateCh:
 			updateNumberOfPeers(peerUpdate, updateQueueSize)
-		case newIsAlive := <- IsaliveR:
-			receiveMessage(newIsAlive, incomingMSG)
-		case broadcastTransmitMSG := <-outgoingMSG:
-
-		case incomingMSG <- broadcastReceiveMSG
+		case broadcastTransmitMSG <-outgoingMSG:
+		case incomingMSG <- broadcastReceiveMSG:
 		}
 	}
-
-}
-
-func receiveIsAlive(Message driverState, incomingMSG <-chan message) {
-	
 }
 
 func InitializeNetwork() string {

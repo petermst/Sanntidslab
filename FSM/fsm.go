@@ -24,14 +24,14 @@ func RunFSM(id string, setMotorDirection chan int, startDoorTimer chan bool, eve
 		select {
 		case <-eventElevatorStuck:
 			state = STATE_STUCK
-			//elevatorStuckUpdateQueue <- true
+			elevatorStuckUpdateQueue <- true
 		case floor := <-eventAtFloor:
 			eventAtFloor(state, floor, shouldStop)
 		case directionAndFloor <- nextDirection:
 			state = eventNewDirection(id, state, directionAndFloor, startDoorTimer, setMotorDirection)
 			setMotorDirection <- directionAndFloor[0]
 		case <-eventDoorTimeout:
-			state = eventDoorTimeout()
+			state = eventDoorTimeout(state)
 			getNextDirection <- true
 		}
 	}
@@ -42,18 +42,18 @@ func eventAtFloor(state State, floor int, shouldStop chan<- int) {
 	case STATE_MOVING:
 		shouldStop <- floor
 	default:
-		//FEIL
+		return state
 	}
 
 }
 
-func eventDoorTimeout() State {
+func eventDoorTimeout(state State) State {
 	switch state {
 	case STATE_DOOR_OPEN:
 
 		return STATE_IDLE
 	default:
-		//FEIL
+		return state
 	}
 }
 
@@ -70,7 +70,7 @@ func eventNewDirection(id string, state State, directionAndFloor []int, startDoo
 			return STATE_MOVING
 		}
 	default:
-		//FEIL
+		return state
 	}
 
 }

@@ -19,7 +19,10 @@ type PeerUpdate struct {
 const interval = 10 * time.Millisecond
 const timeout = 50 * time.Millisecond
 
-func TransmitterPeers(port int, id string, transmitEnable <-chan bool, transmitUpdate <-chan driverState) {
+func TransmitterPeers(port int, id string, transmitEnable <-chan bool, newPeerTransmitMSG  <-chan driverState) {
+	
+	currentDriverState := driverState{id,1,-1}
+	peerTransmitMSG := make(chan driverState)
 
 	conn := DialBroadcastUDP(port)
 	addr, _ := net.ResolveUDPAddr("udp4", fmt.Sprintf("255.255.255.255:%d", port))
@@ -29,20 +32,21 @@ func TransmitterPeers(port int, id string, transmitEnable <-chan bool, transmitU
 
 	selectCases[0] = reflect.SelectCase{
 		Dir: reflect.SelectRecv,
-		Chan: reflect.ValueOf(transmitUpdate)
+		Chan: reflect.ValueOf(peerTransmitMSG)
 	}
-	typenames[0] = reflect.TypeOf(transmitUpdate).Elem().String()
+	typenames[0] = reflect.TypeOf(peerTransmitMSG).Elem().String()
 
 	enable := true
-
-	currentDriverState := driverState{id,1,0}
 
 	for {
 		select {
 		case enable = <-transmitEnable:
-		case currentDriverState = <-transmitUpdate:
+		case currentDriverState = <- newPeerTransmitMSG:
 		case <-time.After(interval):
 		}
+
+		peerTransmitMSG <- currentDriverState
+		
 		if enable {
 			chosen, value, _ := reflect.Select(selectCases)
 			buf, _ := json.Marshal(value.Interface())

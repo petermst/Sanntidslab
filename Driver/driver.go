@@ -48,13 +48,18 @@ func RunDriver(setButtonIndicator chan ButtonIndicator, setMotorDirection <-chan
 			lampSetChannelMatrix[lamp.floor][lamp.button] = lamp.value
 		case <-checkTicker:
 			checkButtonsPressed(setButtonIndicator)
-			checkFloorArrival(eventAtFloor)
+			reached := checkFloorArrival(eventAtFloor)
+			if reached {
+				elevatorStuckTimer.Reset(10* time.Second)
+			}
 		case dir := <-setMotorDirection:
 			ElevSetMotorDirection(dir)
 			if dir != 0{
 				elevatorStuckTimer.Reset(10* time.Second)
 			}
 		case <-startDoorTimer:
+			elevatorStuckTimer.Stop()
+
 			setDoor(DOOR_OPEN)
 			doorTimer := time.NewTimer(time.Second * 3)
 			
@@ -68,9 +73,10 @@ func RunDriver(setButtonIndicator chan ButtonIndicator, setMotorDirection <-chan
 				<-doorTimer.C
 				setDoor(DOOR_CLOSE)
 				eventDoorTimeout <- true
+				}()
+
 		case <- elevatorStuckTimer.C:
 			eventElevatorStuck <- true
-			}()
 		}
 	}
 }
@@ -85,13 +91,16 @@ func checkButtonsPressed(calcOptimalElevator  chan<- Order) {
 	}
 }
 
-func checkFloorArrival(eventAtFloor chan<- int) {
+func checkFloorArrival(eventAtFloor chan<- int) (bool){
 	curFloorIndicator := ElevGetFloorSensorSignal()
 	if curFloorIndicator != -1 && lastFloorIndicator == -1 {
 		ElevSetFloorIndicator(curFloorIndicator)
-		//eventAtFloor <- curFloorIndicator
+		eventAtFloor <- curFloorIndicator
+		lastFloorIndicator = curFloorIndicator
+		return true
 	}
 	lastFloorIndicator = curFloorIndicator
+	return false
 }
 
 func setDoor(doorOpen int) {
