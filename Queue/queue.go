@@ -1,37 +1,13 @@
 package Queue
 
 import (
-	. "../Driver"
-	. "../FSM"
-	. "../Network"
+	. "../Def"
 	"fmt"
 	//"os"
 	"time"
 )
 
 var n_elevators = 1
-
-type QueueOperation struct {
-	isAddOrder 	bool
-	elevatorId  string
-	floor     	int
-	button 		int
-}
-
-type Order struct {
-	floor  int
-	button int
-}
-
-type QueueMap struct {
-	mux   sync.Mutex
-	queue map[string][][]bool
-}
-
-type DriverStatesMap struct {
-	mux sync.Mutex
-	states map[string][]int
-}
 
 func RunQueue(id string,calcOptimalElevator <-chan Order, updateQueue <-chan QueueOperation, updateQueueSize <-chan NewOrLostPeer, shouldStop <-chan int, setButtonIndicator chan ButtonIndicator, incomingMessage <-chan QueueOperation, outgoingMessage chan<- QueueOperation, messageSent <-chan QueueOperation, nextDirection chan []int, getNextDirection chan bool,  peersTransmitMSG chan driverState, elevatorStuck <-chan bool) {
 	inQueue := 0
@@ -54,7 +30,7 @@ func RunQueue(id string,calcOptimalElevator <-chan Order, updateQueue <-chan Que
 
 	for {
 		select {
-		case outgoingMessage <- updateQueue:
+		case outgoingMessage <- updateQueueCh:
 		case peer := <- updateQueueSize:
 			updateQueueSize(queue, driverStates, peer)
 		case receivedMessageOperation := <- incomingMSG:

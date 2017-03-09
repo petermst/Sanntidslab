@@ -8,13 +8,10 @@ import (
 	"sort"
 	"strings"
 	"time"
+	. "../Def"
 )
 
-type PeerUpdate struct {
-	Peers []string
-	New   string
-	Lost  []string
-}
+
 
 const interval = 10 * time.Millisecond
 const timeout = 50 * time.Millisecond
@@ -46,7 +43,7 @@ func TransmitterPeers(port int, id string, transmitEnable <-chan bool, newPeerTr
 		}
 
 		peerTransmitMSG <- currentDriverState
-		
+
 		if enable {
 			chosen, value, _ := reflect.Select(selectCases)
 			buf, _ := json.Marshal(value.Interface())

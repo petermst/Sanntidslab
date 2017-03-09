@@ -1,6 +1,7 @@
 package Network
 
 import (
+	. "../Def"
 	"encoding/json"
 	"fmt"
 	"net"

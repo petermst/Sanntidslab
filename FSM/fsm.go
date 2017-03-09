@@ -1,46 +1,36 @@
 package FSM
 
 import (
-	. "./Driver"
-	. "./Queue"
-	"fmt"
-	"os"
-	"time"
+	. "../Def"
+	//"fmt"
+	//"os"
+	//"time"
 )
 
-type State int
-
-const (
-	STATE_IDLE State = 0
-	STATE_MOVING
-	STATE_DOOR_OPEN
-	STATE_STUCK
-)
-
-func RunFSM(id string, setMotorDirection chan int, startDoorTimer chan bool, eventElevatorStuck chan<- bool, eventAtFloor <-chan int, eventDoorTimeout <-chan bool, nextDirection <-chan []int, shouldStop chan<- int, getNextDirection chan<- bool, elevatorStuckUpdateQueue chan<- bool, updateQueue chan<- QueueOperation) {
+func RunFSM(id string, setMotorDirectionCh chan int, startDoorTimerCh chan bool, eventElevatorStuckCh <-chan bool, eventAtFloorCh <-chan int, eventDoorTimeoutCh <-chan bool, nextDirectionCh <-chan []int, shouldStopCh chan<- int, getNextDirectionCh chan<- bool, elevatorStuckUpdateQueueCh chan<- bool, updateQueueCh chan<- QueueOperation) {
 	state := STATE_IDLE
 
 	for {
 		select {
-		case <-eventElevatorStuck:
+		case <-eventElevatorStuckCh:
 			state = STATE_STUCK
-			elevatorStuckUpdateQueue <- true
-		case floor := <-eventAtFloor:
-			eventAtFloor(state, floor, shouldStop)
-		case directionAndFloor <- nextDirection:
-			state = eventNewDirection(id, state, directionAndFloor, startDoorTimer, setMotorDirection)
-			setMotorDirection <- directionAndFloor[0]
-		case <-eventDoorTimeout:
+			elevatorStuckUpdateQueueCh <- true
+		case floor := <-eventAtFloorCh:
+			eventAtFloor(state, floor, shouldStopCh)
+		case directionAndFloor := <-nextDirectionCh:
+			state = eventNewDirection(id, state, directionAndFloor, startDoorTimerCh)
+			setMotorDirectionCh <- directionAndFloor[0]
+		case <-eventDoorTimeoutCh:
 			state = eventDoorTimeout(state)
-			getNextDirection <- true
+			getNextDirectionCh <- true
 		}
 	}
 }
 
-func eventAtFloor(state State, floor int, shouldStop chan<- int) {
+func eventAtFloor(state State, floor int, shouldStopCh chan<- int) {
 	switch state {
 	case STATE_MOVING:
-		shouldStop <- floor
+		shouldStopCh <- floor
 	default:
 		return state
 	}
@@ -57,12 +47,12 @@ func eventDoorTimeout(state State) State {
 	}
 }
 
-func eventNewDirection(id string, state State, directionAndFloor []int, startDoorTimer chan<- bool, setMotorDirection chan<- int) State {
+func eventNewDirection(id string, state State, directionAndFloor []int, startDoorTimerCh chan<- bool) State {
 	switch state {
 	case STATE_MOVING:
 	case STATE_IDLE:
 		if directionAndFloor[0] == 0 {
-			startDoorTimer <- true
+			startDoorTimerCh <- true
 			QueOpe := QueueOperation{false, id, directionAndFloor[1], 0}
 			updateQueue <- QueOpe
 			return STATE_DOOR_OPEN

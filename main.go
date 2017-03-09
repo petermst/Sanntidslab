@@ -1,6 +1,7 @@
 package main
 
 import (
+	. "./Def"
 	. "./Driver"
 	. "./FSM"
 	. "./Network"
@@ -19,29 +20,29 @@ func main() {
 
 	const id = InitializeNetwork()
 
-	setMotorDirection := make(chan int, 1)              //Driver <- FSM
-	startDoorTimer := make(chan bool, 1)                //Driver <- FSM
-	setButtonIndicator := make(chan ButtonIndicator, 1) //Driver <- Queue
-	eventElevatorStuck := make(chan bool, 1)            //FSM <- Driver
-	eventAtFloor := make(chan int, 1)                   //FSM <- Driver
-	eventDoorTimeout := make(chan bool, 1)              //FSM <- Driver
-	nextDirection := make(chan int, 1)                  //FSM <- Queue
-	calcOptimalElevator := make(chan Order, 1)          //Queue <- Driver
-	shouldStop := make(chan int, 1)                     //Queue <- FSM
-	getNextDirection := make(chan bool, 1)              //Queue <- FSM
-	elevatorStuckUpdateQueue := make(chan bool, 1)      //Queue <- FSM
-	updateQueue := make(chan QueueOperation, 1)         //Queue <- FSM
-	updatePeersOnQueue := make(chan driverState, 1)     //Queue <- Network
-	messageSent := make(chan QueueOperation, 1)         //Queue <- Network
-	updateQueueSize := make(chan NewOrLostPeer, 1)      //Queue <- Network
-	incomingMSG := make(chan QueueOperation, 1)         //Queue <- Network
-	outgoingMSG := make(chan QueueOperation, 1)         //Network <- Queue
-	peersTransmitMSG := make(chan driverState, 1)       //Network <- Queue
+	setMotorDirectionCh := make(chan int, 1)              //Driver <- FSM
+	startDoorTimerCh := make(chan bool, 1)                //Driver <- FSM
+	setButtonIndicatorCh := make(chan ButtonIndicator, 1) //Driver <- Queue
+	eventElevatorStuckCh := make(chan bool, 1)            //FSM <- Driver
+	eventAtFloorCh := make(chan int, 1)                   //FSM <- Driver
+	eventDoorTimeoutCh := make(chan bool, 1)              //FSM <- Driver
+	nextDirectionCh := make(chan int, 1)                  //FSM <- Queue
+	calcOptimalElevatorCh := make(chan Order, 1)          //Queue <- Driver
+	shouldStopCh := make(chan int, 1)                     //Queue <- FSM
+	getNextDirectionCh := make(chan bool, 1)              //Queue <- FSM
+	elevatorStuckUpdateQueueCh := make(chan bool, 1)      //Queue <- FSM
+	updateQueueCh := make(chan QueueOperation, 1)         //Queue <- FSM
+	updatePeersOnQueueCh := make(chan driverState, 1)     //Queue <- Network
+	messageSentCh := make(chan QueueOperation, 1)         //Queue <- Network
+	updateQueueSizeCh := make(chan NewOrLostPeer, 1)      //Queue <- Network
+	incomingMSGCh := make(chan QueueOperation, 1)         //Queue <- Network
+	outgoingMSGCh := make(chan QueueOperation, 1)         //Network <- Queue
+	peersTransmitMSGCh := make(chan driverState, 1)       //Network <- Queue
 
-	go RunDriver(setButtonIndicator, setMotorDirection, startDoorTimer, eventElevatorStuck, eventAtFloor, eventDoorTimeout)
-	go RunFSM(id, setMotorDirection, startDoorTimer, eventElevatorStuck, eventAtFloor, nextDirection, shouldStop, getNextDirection, elevatorStuckUpdateQueue, updateQueue)
-	go RunNetwork(id, updatePeersOnQueue, updateQueueSize, incomingMSG, outgoingMSG, peersTransmitMSG, messageSent)
-	go RunQueue(id, calcOptimalElevator, updateQueue, updateQueueSize, shouldStop, setButtonIndicator, incomingMSG, outgoingMSG, messageSent, nextDirection, getNextDirection, peersTransmitMSG, elevatorStuckUpdateQueue)
+	go RunDriver(id, setButtonIndicatorCh, setMotorDirectionCh, startDoorTimerCh, eventElevatorStuckCh, eventAtFloorCh, eventDoorTimeoutCh)
+	go RunFSM(id, setMotorDirectionCh, startDoorTimerCh, eventElevatorStuckCh, eventAtFloorCh, nextDirectionCh, shouldStopCh, getNextDirectionCh, elevatorStuckUpdateQueueCh, updateQueueCh)
+	go RunNetwork(id, updatePeersOnQueueCh, updateQueueSizeCh, incomingMSGCh, outgoingMSGCh, peersTransmitMSGCh, messageSentCh)
+	go RunQueue(id, calcOptimalElevatorCh, updateQueueCh, updateQueueSizeCh, shouldStopCh, setButtonIndicatorCh, incomingMSGCh, outgoingMSGCh, messageSentCh, nextDirectionCh, getNextDirectionCh, peersTransmitMSGCh, elevatorStuckUpdateQueueCh)
 
 	for {
 		// Change direction when we reach top/bottom floor

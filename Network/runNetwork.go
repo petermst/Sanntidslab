@@ -1,22 +1,11 @@
 package Network
 
 import (
-	. "./Queue"
+	. "../Def"
 	"fmt"
 	"os"
 	"time"
 )
-
-type driverState struct {
-	id        string
-	lastFloor int
-	direction int
-}
-
-type NewOrLostPeer struct{
-	id string
-	isNew bool
-}
 
 func runNetwork(elevatorID string, updatePeersOnQueue chan<- driverState, updateQueueSize chan<- NewOrLostPeer, incomingMSG chan<- QueueOperation, outgoingMSG <-chan QueueOperation, peersTransmitMSG chan driverState, messageSent chan<- QueueOperation) {
 
