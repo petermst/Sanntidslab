@@ -28,6 +28,11 @@ type QueueMap struct {
 	queue map[string][][]bool
 }
 
+type DriverStatesMap struct {
+	mux sync.Mutex
+	states map[string][]int
+}
+
 func RunQueue(id string,calcOptimalElevator <-chan Order, updateQueue <-chan QueueOperation, updateQueueSize <-chan NewOrLostPeer, shouldStop <-chan int, setButtonIndicator chan ButtonIndicator, incomingMessage <-chan QueueOperation, outgoingMessage chan<- QueueOperation, messageSent <-chan QueueOperation, nextDirection chan []int, getNextDirection chan bool,  peersTransmitMSG chan driverState, elevatorStuck <-chan bool) {
 	inQueue := 0
 
@@ -35,14 +40,16 @@ func RunQueue(id string,calcOptimalElevator <-chan Order, updateQueue <-chan Que
 	for i := range tempQueue {
 		tempQueue[i] = make([]bool, N_BUTTONS)
 	}
-	queue := QueueMap{queue: make(map[string][][]bool)}
+	queue.queue := QueueMap{queue: make(map[string][][]bool)}
 	queue.mux.Lock()
-	queue[id] = tempQueue
+	queue.queue[id] = tempQueue
 	queue.mux.Unlock()
 
 	//First is floor, second is direction
-	driverStates := make(map[string][]int)
-	driverStates[id] = []int{1, -1}
+	driverStates := DriverStatesMap{states: make(map[string][]int)}
+	driverStates.mux.Lock()
+	driverStates.states[id] = []int{1, -1}
+	driverStates.mux.Unlock()
 
 
 	for {
@@ -58,11 +65,17 @@ func RunQueue(id string,calcOptimalElevator <-chan Order, updateQueue <-chan Que
 			updateButtonIndicators(id,sentMessageOperation,setButtonIndicator)
 		case floor := <- shouldStop:
 			shouldStop(id, floor, queue, driverStates, nextDirection)
+			driverStates.mux.Lock()
+			driverStates.states[id][0] = floor
+			peersTransmitMSG <- driverState{id,floor,driverStates.states[id][1]}
+			driverStates.mux.Unlock()
 		case <-getNextDirection:
 			nextDirection(id, queue, driverStates, peersTransmitMSG, nextDirection)
 		case <- elevatorStuck:
-			driverStates[id][0] = 100
+			driverStates.mux.Lock()
+			driverStates.states[id][0] = 100
 			peersTransmitMSG <- driverState{id, driverStates[id][0], driverStates[id][1]}
+			driverStates.mux.Unlock()
 			//redistribute orders
 		case calc := <-calcOptimalElevator:
 			calculateOptimalElevator(id, driverStates, calc, outgoingMessage)
@@ -73,7 +86,7 @@ func RunQueue(id string,calcOptimalElevator <-chan Order, updateQueue <-chan Que
 func updateQueue(id int, operation QueueOperation, queue QueueMap, inQueue int, getNextDirection chan<- bool) {
 	if operation.isAddOrder {
 		queue.mux.Lock()
-		queue[operation.elevatorId][operation.floor][operation.button] = operation.isAddOrder
+		queue.queue[operation.elevatorId][operation.floor][operation.button] = operation.isAddOrder
 		queue.mux.Unlock()
 		inQueue += 1
 		if inQueue == 1 {
@@ -84,61 +97,65 @@ func updateQueue(id int, operation QueueOperation, queue QueueMap, inQueue int, 
 		for elevID,_ := range queue {
 			for i := 0; i < 2; i++  {
 				queue.mux.Lock()
-				defer queue.mux.Unlock()
-				if queue[elevID][operation.floor][i] {
-					queue.mux.Lock()
-					queue[elevID][operation.floor][i] = operation.isAddOrder
-					queue.mux.Unlock()
+				if queue.queue[elevID][operation.floor][i] {
+					queue.queue[elevID][operation.floor][i] = operation.isAddOrder
 					if elevID == id {
 						inQueue -= 1
 					}
 				}
+				queue.mux.Unlock()
 			}
 		}
 		queue.mux.Lock()
-		defer queue.mux.Unlock()
-		if queue[operation.elevatorId][operation.floor][2] {
-			queue.mux.Lock()
-			queue[operation.elevatorId][operation.floor][2] = operation.isAddOrder
-			queue.mux.Unlock()
+		if queue.queue[operation.elevatorId][operation.floor][2] {
+			queue.queue[operation.elevatorId][operation.floor][2] = operation.isAddOrder
 			inQueue -= 1
 		}
+		queue.mux.Unlock()
 	}
 }
 
-func updateQueueSize(queue QueueMap, driverStates map[string][]int, peer NewOrLostPeer) {
+func updateQueueSize(queue QueueMap, driverStates DriverStatesMap, peer NewOrLostPeer) {
 	if peer.isNew{
 		tempQueue := make([][]bool, N_FLOORS)
 		for i := range tempQueue {
 			tempQueue[i] = make([]bool, N_BUTTONS)
 		}
 		queue.mux.Lock()
-		queue[peer.id] = tempQueue
+		queue.queue[peer.id] = tempQueue
 		queue.mux.Unlock()
-		driverStates[peer.id] = []int{1, -1}
+		driverStates.mux.Lock()
+		driverStates.states[peer.id] = []int{1, -1}
+		driverStates.mux.Unlock()
 	}
 	else{
 		//Redistribute orders here
+		driverStates.mux.Lock()
 		delete(driverStates, peer.id)
+		driverStates.mux.Unlock()
+		queue.mux.Lock()
 		delete(queue, peer.id)
+		queue.mux.Unlock()
 	}
 }
 
-func shouldStop(id string, floor int, queue QueueMap, driverStates map[string][]int, nextDirection chan<- []int) {
-	currentDirection := driverStates[id][1]
+func shouldStop(id string, floor int, queue QueueMap, driverStates DriverStatesMap, nextDirection chan<- []int) {
+	driverStates.mux.Lock()
+	currentDirection := driverStates.states[id][1]
+	driverStates.mux.Unlock()
 	if currentDirection == -1 {
 		queue.mux.Lock()
-		defer queue.mux.Unlock()
-		if ((queue[id][floor][2])||(queue[id][floor][1])||(floor == 0)) {
+		if ((queue.queue[id][floor][2])||(queue.queue[id][floor][1])||(floor == 0)) {
 			nextDirection <- []int{0,floor}
 		}
+		queue.mux.Unlock()
 	}
 	else{
 		queue.mux.Lock()
-		defer queue.mux.Unlock()
-		if ((queue[id][floor][2])||(queue[id][floor][0])||(floor == N_FLOORS-1)) {
+		if ((queue.queue[id][floor][2])||(queue.queue[id][floor][0])||(floor == N_FLOORS-1)) {
 			nextDirection <- []int{0,floor}
 		}
+		queue.mux.Unlock()
 	}
 }
 
@@ -164,7 +181,7 @@ func updateButtonIndicators(id string, operation QueueOperation, setButtonIndica
 	}
 }
 
-func calculateOptimalElevator(id string, elevatorStates map[string][]int, order Order, outgoingMessage chan<- QueueOperation) {
+func calculateOptimalElevator(id string, driverStates DriverStatesMap, order Order, outgoingMessage chan<- QueueOperation) {
 	var lowestCost int = 1000
 	var lowestCostID string
 	n_moves := N_FLOORS-1
@@ -173,8 +190,10 @@ func calculateOptimalElevator(id string, elevatorStates map[string][]int, order 
 	}
 	else if order.button == 1 {
 		for elevID,list := range queue {
-			curFloor := driverStates[elevID][0]
-			curDir := driverStates[elevID][1]
+			driverStates.mux.Lock()
+			curFloor := driverStates.states[elevID][0]
+			curDir := driverStates.states[elevID][1]
+			driverStates.mux.Unlock()
 			tempCost := 0
 			if ((curDir == order.button+1)||(curDir == order.button-2)) {
 				if (curDir*(order.floor-curfloor) > 0) {
@@ -198,18 +217,20 @@ func calculateOptimalElevator(id string, elevatorStates map[string][]int, order 
 	outgoingMessage <- QueueOperation{true, lowestCostID, order.floor, order.button}
 }
 
-func nextDirection(id string, queue QueueMap, driverStates map[string][]int, peersTransmitMSG chan<- driverState, nextDirection chan<- []int) {
-	currentDirection := driverStates[id][1]
-	currentFloor := driverStates[id][0]
+func nextDirection(id string, queue QueueMap, driverStates DriverStatesMap, peersTransmitMSG chan<- driverState, nextDirection chan<- []int) {
+	driverStates.mux.Lock()
+	currentDirection := driverStates.states[id][1]
+	currentFloor := driverStates.states[id][0]
+	driverStates.mux.Unlock()
 	updateDirection := 5
 	if currentDirection == -1 {
 		for floor := currentFloor; floor >= 0; i-- {
 			for button := 0; i < N_BUTTONS; button++ {
 				queue.mux.Lock()
-				defer queue.mux.Unlock()
-				if queue[id][floor][button] {
+				if queue.queue[id][floor][button] {
 					updateDirection = currentDirection
 				}
+				queue.mux.Unlock()
 			}
 		}
 	}
@@ -217,18 +238,17 @@ func nextDirection(id string, queue QueueMap, driverStates map[string][]int, pee
 		for floor := currentFloor; floor < N_FLOORS; floor++ {
 			for button := 0; button < N_BUTTONS; button++ {
 				queue.mux.Lock()
-				defer queue.mux.Unlock()
-				if queue[id][floor][button] {
+				if queue.queue[id][floor][button] {
 					updateDirection = currentDirection
 				}
+				queue.mux.Unlock()
 			}
 		}
 	}
 	for floor := 0; floor < N_FLOORS; floor++ {
 		for button := 0; button < N_BUTTONS; button++ {
 			queue.mux.Lock()
-			defer queue.mux.Unlock()
-			if queue[id][floor][button] {
+			if queue.queue[id][floor][button] {
 				if floor < currentFloor {
 					updateDirection = -1
 				}
@@ -239,12 +259,15 @@ func nextDirection(id string, queue QueueMap, driverStates map[string][]int, pee
 					updateDirection = 0
 				}
 			}
+			queue.mux.Unlock()
 		}
 	}
 	if updateDirection != 5 {
 		if updateDirection != 0 {
-			driverStates[id][1] = updateDirection
+			driverStates.mux.Lock()
+			driverStates.states[id][1] = updateDirection
 			peersTransmitMSG <- driverState{id, driverStates[id][0], driverStates[id][1]}
+			driverStates.mux.Unlock()
 		}
 		nextDirection <- []int{updateDirection, currentFloor}
 	}

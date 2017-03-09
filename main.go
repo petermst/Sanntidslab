@@ -32,16 +32,16 @@ func main() {
 	elevatorStuckUpdateQueue := make(chan bool, 1)      //Queue <- FSM
 	updateQueue := make(chan QueueOperation, 1)         //Queue <- FSM
 	updatePeersOnQueue := make(chan driverState, 1)     //Queue <- Network
-	messageSent := make(chan QueueOperation)            //Queue <- Network
+	messageSent := make(chan QueueOperation, 1)         //Queue <- Network
 	updateQueueSize := make(chan NewOrLostPeer, 1)      //Queue <- Network
-	incomingMSG := make(chan QueueOperation)            //Queue <- Network
-	outgoingMSG := make(chan QueueOperation)            //Network <- Queue
-	peersTransmitMSG := make(chan driverState)          //Network <- Queue
+	incomingMSG := make(chan QueueOperation, 1)         //Queue <- Network
+	outgoingMSG := make(chan QueueOperation, 1)         //Network <- Queue
+	peersTransmitMSG := make(chan driverState, 1)       //Network <- Queue
 
 	go RunDriver(setButtonIndicator, setMotorDirection, startDoorTimer, eventElevatorStuck, eventAtFloor, eventDoorTimeout)
 	go RunFSM(id, setMotorDirection, startDoorTimer, eventElevatorStuck, eventAtFloor, nextDirection, shouldStop, getNextDirection, elevatorStuckUpdateQueue, updateQueue)
 	go RunNetwork(id, updatePeersOnQueue, updateQueueSize, incomingMSG, outgoingMSG, peersTransmitMSG, messageSent)
-	go RunQueue(id, updateQueue, updateQueueSize, shouldStop, setButtonIndicator, incomingMSG, outgoingMSG, messageSent, nextDirection, getNextDirection, peersTransmitMSG, elevatorStuckUpdateQueue)
+	go RunQueue(id, calcOptimalElevator, updateQueue, updateQueueSize, shouldStop, setButtonIndicator, incomingMSG, outgoingMSG, messageSent, nextDirection, getNextDirection, peersTransmitMSG, elevatorStuckUpdateQueue)
 
 	for {
 		// Change direction when we reach top/bottom floor
