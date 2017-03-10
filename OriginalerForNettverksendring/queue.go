@@ -11,7 +11,7 @@ var n_elevators = 1
 
 var inQueue = 0
 
-func RunQueue(id string, initFloor int, calcOptimalElevatorCh <-chan Order, updateQueueCh chan QueueOperation, updateQueueSizeCh <-chan NewOrLostPeer, shouldStopCh <-chan int, setButtonIndicatorCh chan ButtonIndicator, messageSentCh <-chan QueueOperation, nextDirectionCh chan []int, getNextDirectionCh chan bool, elevatorStuckCh <-chan bool, outgoingQueueUpdateCh chan<- QueueOperation, incomingQueueUpdateCh <-chan QueueOperation, outgoingDriverStateUpdateCh chan<- DriverState, incomingDriverStateUpdateCh <-chan DriverState) {
+func RunQueue(id string, initFloor int, calcOptimalElevatorCh <-chan Order, updatePeersOnQueueCh <-chan DriverState, updateQueueCh chan QueueOperation, updateQueueSizeCh <-chan NewOrLostPeer, shouldStopCh <-chan int, setButtonIndicatorCh chan ButtonIndicator, incomingMessageCh <-chan QueueOperation, outgoingMessageCh chan<- QueueOperation, messageSentCh <-chan QueueOperation, nextDirectionCh chan []int, getNextDirectionCh chan bool, peersTransmitMessageCh chan DriverState, elevatorStuckCh <-chan bool) {
 
 	tempQueue := make([][]bool, N_FLOORS)
 	for i := range tempQueue {
@@ -34,15 +34,15 @@ func RunQueue(id string, initFloor int, calcOptimalElevatorCh <-chan Order, upda
 			shouldStop(id, floor, queue, driverStates, nextDirectionCh)
 			driverStates.Mux.Lock()
 			driverStates.States[id][0] = floor
-			outgoingDriverStateUpdateCh <- DriverState{id, floor, driverStates.States[id][1]}
+			peersTransmitMessageCh <- DriverState{id, floor, driverStates.States[id][1]}
 			driverStates.Mux.Unlock()
 		case queueUpdateToSend := <-updateQueueCh:
 			fmt.Println("1\n")
-			outgoingQueueUpdateCh <- queueUpdateToSend
+			outgoingMessageCh <- queueUpdateToSend
 		case peer := <-updateQueueSizeCh:
 			fmt.Println("2\n")
 			updateQueueSize(queue, driverStates, peer)
-		case receivedMessageOperation := <-incomingQueueUpdateCh:
+		case receivedMessageOperation := <-incomingMessageCh:
 			updateQueue(id, receivedMessageOperation, queue, getNextDirectionCh)
 			updateButtonIndicators(id, receivedMessageOperation, setButtonIndicatorCh)
 		case sentMessageOperation := <-messageSentCh:
@@ -51,18 +51,18 @@ func RunQueue(id string, initFloor int, calcOptimalElevatorCh <-chan Order, upda
 			updateButtonIndicators(id, sentMessageOperation, setButtonIndicatorCh)
 		case <-getNextDirectionCh:
 			fmt.Println("5\n")
-			nextDirection(id, queue, driverStates, outgoingDriverStateUpdateCh, nextDirectionCh)
+			nextDirection(id, queue, driverStates, peersTransmitMessageCh, nextDirectionCh)
 		case <-elevatorStuckCh:
 			fmt.Println("6\n")
 			driverStates.Mux.Lock()
 			driverStates.States[id][0] = 100
-			outgoingDriverStateUpdateCh <- DriverState{id, driverStates.States[id][0], driverStates.States[id][1]}
+			peersTransmitMessageCh <- DriverState{id, driverStates.States[id][0], driverStates.States[id][1]}
 			driverStates.Mux.Unlock()
 			//redistribute orders
 		case calc := <-calcOptimalElevatorCh:
 			fmt.Println("7\n")
 			calculateOptimalElevator(id, driverStates, calc, outgoingMessageCh)
-		case updatedDriverState := <-incomingDriverStateUpdateCh:
+		case updatedDriverState := <-updatePeersOnQueueCh:
 			//fmt.Println("8\n")
 			driverStates.Mux.Lock()
 			driverStates.States[id][0] = updatedDriverState.LastFloor
@@ -219,7 +219,7 @@ func calculateOptimalElevator(id string, driverStates DriverStatesMap, order Ord
 	outgoingMessageCh <- QueueOperation{true, lowestCostID, order.Floor, order.Button}
 }
 
-func nextDirection(id string, queue QueueMap, driverStates DriverStatesMap, outgoingDriverStateUpdateCh chan<- DriverState, nextDirectionCh chan<- []int) {
+func nextDirection(id string, queue QueueMap, driverStates DriverStatesMap, peersTransmitMessageCh chan<- DriverState, nextDirectionCh chan<- []int) {
 	driverStates.Mux.Lock()
 	currentDirection := driverStates.States[id][1]
 	currentFloor := driverStates.States[id][0]
@@ -265,7 +265,7 @@ func nextDirection(id string, queue QueueMap, driverStates DriverStatesMap, outg
 		if updateDirection != 0 {
 			driverStates.Mux.Lock()
 			driverStates.States[id][1] = updateDirection
-			outgoingDriverStateUpdateCh <- DriverState{id, driverStates.States[id][0], driverStates.States[id][1]}
+			peersTransmitMessageCh <- DriverState{id, driverStates.States[id][0], driverStates.States[id][1]}
 			driverStates.Mux.Unlock()
 		}
 		nextDirectionCh <- []int{updateDirection, currentFloor}

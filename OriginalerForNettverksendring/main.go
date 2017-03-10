@@ -28,17 +28,17 @@ func main() {
 	getNextDirectionCh := make(chan bool, 1)              //Queue <- FSM
 	elevatorStuckUpdateQueueCh := make(chan bool, 1)      //Queue <- FSM
 	updateQueueCh := make(chan QueueOperation, 1)         //Queue <- Driver
+	updatePeersOnQueueCh := make(chan DriverState, 1)     //Queue <- Network
 	messageSentCh := make(chan QueueOperation, 1)         //Queue <- Network
 	updateQueueSizeCh := make(chan NewOrLostPeer, 1)      //Queue <- Network
-	incomingQueueUpdateCh := make(chan QueueOperation, 1)     //Queue <- Network
-	outgoingQueueUpdateCh := make(chan QueueOperation, 1)     //Network <- Queue
-	incomingDriverStateUpdateCh := make(chan DriverState, 1)	//Queue <- Network
-	outgoingDriverStateUpdateCh := make(chan DriverState, 1)	//Network <- Queue
+	incomingMessageCh := make(chan QueueOperation, 1)     //Queue <- Network
+	outgoingMessageCh := make(chan QueueOperation, 1)     //Network <- Queue
+	peersTransmitMessageCh := make(chan DriverState, 1)   //Network <- Queue
 
 	go RunDriver(id, setButtonIndicatorCh, setMotorDirectionCh, startDoorTimerCh, eventElevatorStuckCh, eventAtFloorCh, eventDoorTimeoutCh, calcOptimalElevatorCh, updateQueueCh)
 	go RunFSM(id, setMotorDirectionCh, startDoorTimerCh, eventElevatorStuckCh, eventAtFloorCh, nextDirectionCh, shouldStopCh, eventDoorTimeoutCh, getNextDirectionCh, elevatorStuckUpdateQueueCh)
-	go RunQueue(id, initFloor, calcOptimalElevatorCh, updateQueueCh, updateQueueSizeCh, shouldStopCh, setButtonIndicatorCh, messageSentCh, nextDirectionCh, getNextDirectionCh, peersTransmitMessageCh, elevatorStuckUpdateQueueCh, outgoingQueueUpdateCh, incomingQueueUpdateCh, outgoingDriverStateUpdateCh, incomingDriverStateUpdateCh)
-	go RunNetwork(id, updateQueueSizeCh, peersTransmitMessageCh, messageSentCh, outgoingQueueUpdateCh, incomingQueueUpdateCh, outgoingDriverStateUpdateCh, incomingDriverStateUpdateCh)
+	go RunQueue(id, initFloor, calcOptimalElevatorCh, updatePeersOnQueueCh, updateQueueCh, updateQueueSizeCh, shouldStopCh, setButtonIndicatorCh, incomingMessageCh, outgoingMessageCh, messageSentCh, nextDirectionCh, getNextDirectionCh, peersTransmitMessageCh, elevatorStuckUpdateQueueCh)
+	go RunNetwork(id, updatePeersOnQueueCh, updateQueueSizeCh, incomingMessageCh, outgoingMessageCh, peersTransmitMessageCh, messageSentCh)
 
 	/*
 		for {

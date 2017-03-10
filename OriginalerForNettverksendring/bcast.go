@@ -2,7 +2,6 @@ package Network
 
 import (
 	. "../Def"
-	"../conn"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -12,43 +11,51 @@ import (
 
 // Encodes received values from `chans` into type-tagged JSON, then broadcasts
 // it on `port`
-func Transmitter(port int, messageSentCh chan<- QueueOperation, copyTransmitQueueUpdate <-chan QueueOperation,  chans ...interface{}) {
-	checkArgs(chans...)
+func TransmitterBcast(port int, messageSentCh chan<- QueueOperation, broadcastTransmitMessageCh <-chan QueueOperation) {
+	messageToTransmit := make(chan QueueOperation, 1)
+	n := 1
+	/*
+		checkArgs(chans...)
 
-	n := 0
-	for range chans {
-		n++
-	}
-
+		n := 0
+		for range chans {
+			n++
+		}
+	*/
 	selectCases := make([]reflect.SelectCase, n)
 	typeNames := make([]string, n)
-	for i, ch := range chans {
-		selectCases[i] = reflect.SelectCase{
-			Dir:  reflect.SelectRecv,
-			Chan: reflect.ValueOf(ch),
-		}
-		typeNames[i] = reflect.TypeOf(ch).Elem().String()
-	}
+	selectCases[0] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(messageToTransmit)}
+	typeNames[0] = reflect.TypeOf(messageToTransmit).Elem().String()
 
-	conn := conn.DialBroadcastUDP(port)
+	/*
+
+		for i, ch := range chans {
+			selectCases[i] = reflect.SelectCase{Dir:  reflect.SelectRecv, Chan: reflect.ValueOf(ch)}
+			typeNames[i] = reflect.TypeOf(ch).Elem().String()
+		}
+
+	*/
+
+	conn := DialBroadcastUDP(port)
 	addr, _ := net.ResolveUDPAddr("udp4", fmt.Sprintf("255.255.255.255:%d", port))
 	for {
+		message := <-broadcastTransmitMessageCh
+		messageToTransmit <- message
 		chosen, value, _ := reflect.Select(selectCases)
 		buf, _ := json.Marshal(value.Interface())
 		conn.WriteTo([]byte(typeNames[chosen]+string(buf)), addr)
-		if (chosen == 0) {
-			messageSentCh <- copyTransmitQueueUpdate
-		}
+		messageSentCh <- message
 	}
+
 }
 
 // Matches type-tagged JSON received on `port` to element types of `chans`, then
 // sends the decoded value on the corresponding channel
-func Receiver(port int, chans ...interface{}) {
+func ReceiverBcast(port int, chans ...interface{}) {
 	checkArgs(chans...)
 
 	var buf [1024]byte
-	conn := conn.DialBroadcastUDP(port)
+	conn := DialBroadcastUDP(port)
 	for {
 		n, _, _ := conn.ReadFrom(buf[0:])
 		for _, ch := range chans {
@@ -64,6 +71,7 @@ func Receiver(port int, chans ...interface{}) {
 					Send: reflect.Indirect(v),
 				}})
 			}
+			fmt.Println("Nå mottar vi en melding\n")
 		}
 	}
 }
@@ -72,7 +80,7 @@ func Receiver(port int, chans ...interface{}) {
 //  All args must be channels
 //  Element types of channels must be encodable with JSON
 //  No element types are repeated
-// Implementation note:
+// 	Implementation note:
 //  - Why there is no `isMarshalable()` function in encoding/json is a mystery,
 //    so the tests on element type are hand-copied from `encoding/json/encode.go`
 func checkArgs(chans ...interface{}) {

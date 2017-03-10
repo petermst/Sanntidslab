@@ -1,114 +1,87 @@
 package Network
 
 import (
-	. "../Def"
-	"encoding/json"
+	"../conn"
 	"fmt"
 	"net"
-	"reflect"
 	"sort"
-	"strings"
 	"time"
 )
 
-const interval = 20 * time.Millisecond
-const timeout = 100 * time.Millisecond
+type PeerUpdate struct {
+	Peers []string
+	New   string
+	Lost  []string
+}
 
-func TransmitterPeers(port int, id string, transmitEnableCh <-chan bool, newPeerTransmitMessageCh <-chan DriverState) {
+const interval = 100 * time.Millisecond
+const timeout = time.Second
 
-	currentDriverState := DriverState{id, 1, -1}
-	peerTransmitMessageCh := make(chan DriverState, 1)
+func TransmitterPeers(port int, id string, transmitEnable <-chan bool) {
 
-	conn := DialBroadcastUDP(port)
+	conn := conn.DialBroadcastUDP(port)
 	addr, _ := net.ResolveUDPAddr("udp4", fmt.Sprintf("255.255.255.255:%d", port))
 
-	selectCases := make([]reflect.SelectCase, 1)
-	typeNames := make([]string, 1)
-
-	selectCases[0] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(peerTransmitMessageCh)}
-	typeNames[0] = reflect.TypeOf(peerTransmitMessageCh).Elem().String()
-
 	enable := true
-
 	for {
 		select {
-		case enable = <-transmitEnableCh:
-		case currentDriverState = <-newPeerTransmitMessageCh:
+		case enable = <-transmitEnable:
 		case <-time.After(interval):
 		}
-		peerTransmitMessageCh <- currentDriverState
 		if enable {
-			chosen, value, _ := reflect.Select(selectCases)
-			buf, _ := json.Marshal(value.Interface())
-			conn.WriteTo([]byte(typeNames[chosen]+string(buf)), addr)
+			conn.WriteTo([]byte(id), addr)
 		}
 	}
 }
 
-func ReceiverPeers(ElevId string, port int, peerUpdateCh chan<- PeerUpdate, updatePeersOnQueueCh chan<- DriverState) {
+func ReceiverPeers(port int, peerUpdateCh chan<- PeerUpdate) {
 
 	var buf [1024]byte
 	var p PeerUpdate
 	lastSeen := make(map[string]time.Time)
 
-	conn := DialBroadcastUDP(port)
-
-	newMessageCh := make(chan DriverState, 1)
+	conn := conn.DialBroadcastUDP(port)
 
 	for {
-
-		message := DriverState{"NONEW", 0, 0}
 		updated := false
 
 		conn.SetReadDeadline(time.Now().Add(interval))
 		n, _, _ := conn.ReadFrom(buf[0:])
-		T := reflect.TypeOf(newMessageCh).Elem()
-		typename := T.String()
-		if strings.HasPrefix(string(buf[:n])+"{", typename) {
-			v := reflect.New(T)
-			json.Unmarshal(buf[len(typename):n], v.Interface())
 
-			reflect.Select([]reflect.SelectCase{{
-				Dir:  reflect.SelectSend,
-				Chan: reflect.ValueOf(newMessageCh),
-				Send: reflect.Indirect(v),
-			}})
-			message = <-newMessageCh
-			updatePeersOnQueueCh <- message
+		id := string(buf[:n])
+
+		// Adding new connection
+		p.New = ""
+		if id != "" {
+			if _, idExists := lastSeen[id]; !idExists {
+				p.New = id
+				updated = true
+			}
+
+			lastSeen[id] = time.Now()
 		}
-		if (message.Id != "NONEW") && (message.Id != ElevId) {
-			// Adding new connection
-			p.New = ""
-			if message.Id != "" {
-				if _, idExists := lastSeen[message.Id]; !idExists {
-					p.New = message.Id
-					updated = true
-				}
-				lastSeen[message.Id] = time.Now()
+
+		// Removing dead connection
+		p.Lost = make([]string, 0)
+		for k, v := range lastSeen {
+			if time.Now().Sub(v) > timeout {
+				updated = true
+				p.Lost = append(p.Lost, k)
+				delete(lastSeen, k)
+			}
+		}
+
+		// Sending update
+		if updated {
+			p.Peers = make([]string, 0, len(lastSeen))
+
+			for k, _ := range lastSeen {
+				p.Peers = append(p.Peers, k)
 			}
 
-			// Removing dead connection
-			p.Lost = make([]string, 0)
-			for k, v := range lastSeen {
-				if time.Now().Sub(v) > timeout {
-					updated = true
-					p.Lost = append(p.Lost, k)
-					delete(lastSeen, k)
-				}
-			}
-
-			// Sending update
-			if updated {
-				p.Peers = make([]string, 0, len(lastSeen))
-
-				for k, _ := range lastSeen {
-					p.Peers = append(p.Peers, k)
-				}
-
-				sort.Strings(p.Peers)
-				sort.Strings(p.Lost)
-				peerUpdateCh <- p
-			}
+			sort.Strings(p.Peers)
+			sort.Strings(p.Lost)
+			peerUpdateCh <- p
 		}
 	}
 }

@@ -19,14 +19,17 @@ func RunNetwork(elevatorID string, updatePeersOnQueueCh chan<- DriverState, upda
 	go TransmitterPeers(10808, elevatorID, peerTxEnableCh, peersTransmitMessageCh)
 	go ReceiverPeers(elevatorID, 10808, peerUpdateCh, updatePeersOnQueueCh)
 
-	//channels for sending and receiving custom data types, message for queueupdate
+	//channels for sending and receiving custom data types, message for queue update and driverstate update
 
-	broadcastTransmitMessageCh := make(chan QueueOperation, 1)
-	broadcastReceiveMessageCh := make(chan QueueOperation, 1)
+	transmitDriverStateUpdate := make(chan DriverState, 1)
+	receiveDriverStateUpdate := make(chan DriverState, 1)
+
+	transmitQueueUpdate := make(chan QueueOperation, 1)
+	receiveQueueUpdate := make(chan QueueOperation, 1)
 
 	//goroutines for transmitting and receiving custom data types
-	go TransmitterBcast(32345, messageSentCh, broadcastTransmitMessageCh)
-	go ReceiverBcast(32345, broadcastReceiveMessageCh)
+	go TransmitterBcast(32345, messageSentCh, transmitQueueUpdate, transmitDriverStateUpdate)
+	go ReceiverBcast(32345, receiveQueueUpdate, receiveDriverStateUpdate)
 
 	for {
 		select {
