@@ -2,12 +2,12 @@ package FSM
 
 import (
 	. "../Def"
-	//"fmt"
+	"fmt"
 	//"os"
 	//"time"
 )
 
-func RunFSM(id string, setMotorDirectionCh chan int, startDoorTimerCh chan bool, eventElevatorStuckCh <-chan bool, eventAtFloorCh <-chan int, eventDoorTimeoutCh <-chan bool, nextDirectionCh <-chan []int, shouldStopCh chan<- int, getNextDirectionCh chan<- bool, elevatorStuckUpdateQueueCh chan<- bool, updateQueueCh chan<- QueueOperation) {
+func RunFSM(id string, setMotorDirectionCh chan int, startDoorTimerCh chan bool, eventElevatorStuckCh <-chan bool, eventAtFloorCh <-chan int, nextDirectionCh <-chan []int, shouldStopCh chan int, eventDoorTimeoutCh <-chan bool, getNextDirectionCh chan<- bool, elevatorStuckUpdateQueueCh chan<- bool) {
 	state := STATE_IDLE
 
 	for {
@@ -18,7 +18,7 @@ func RunFSM(id string, setMotorDirectionCh chan int, startDoorTimerCh chan bool,
 		case floor := <-eventAtFloorCh:
 			eventAtFloor(state, floor, shouldStopCh)
 		case directionAndFloor := <-nextDirectionCh:
-			state = eventNewDirection(id, state, directionAndFloor, startDoorTimerCh, updateQueueCh)
+			state = eventNewDirection(id, state, directionAndFloor, startDoorTimerCh)
 			setMotorDirectionCh <- directionAndFloor[0]
 		case <-eventDoorTimeoutCh:
 			state = eventDoorTimeout(state)
@@ -40,27 +40,25 @@ func eventAtFloor(state State, floor int, shouldStopCh chan<- int) State {
 func eventDoorTimeout(state State) State {
 	switch state {
 	case STATE_DOOR_OPEN:
-
 		return STATE_IDLE
 	default:
 		return state
 	}
 }
 
-func eventNewDirection(id string, state State, directionAndFloor []int, startDoorTimerCh chan<- bool, updateQueueCh chan<- QueueOperation) State {
+func eventNewDirection(id string, state State, directionAndFloor []int, startDoorTimerCh chan<- bool) State {
 	switch state {
 	case STATE_MOVING:
+		fallthrough
 	case STATE_IDLE:
 		if directionAndFloor[0] == 0 {
+			fmt.Println("Nå har vi stoppet")
 			startDoorTimerCh <- true
-			QueOpe := QueueOperation{false, id, directionAndFloor[1], 0}
-			updateQueueCh <- QueOpe
 			return STATE_DOOR_OPEN
 		} else {
 			return STATE_MOVING
 		}
-	default:
-		return state
 	}
+	fmt.Printf("eventND returnerer: %d\n", state)
 	return state
 }

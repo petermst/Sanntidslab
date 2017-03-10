@@ -7,35 +7,38 @@ import (
 	//"time"
 )
 
-func runNetwork(elevatorID string, updatePeersOnQueueCh chan<- DriverState, updateQueueSizeCh chan<- NewOrLostPeer, incomingMessageCh chan<- QueueOperation, outgoingMessageCh <-chan QueueOperation, peersTransmitMessageCh chan DriverState, messageSentCh chan<- QueueOperation) {
+func RunNetwork(elevatorID string, updatePeersOnQueueCh chan<- DriverState, updateQueueSizeCh chan<- NewOrLostPeer, incomingMessageCh chan<- QueueOperation, outgoingMessageCh <-chan QueueOperation, peersTransmitMessageCh chan DriverState, messageSentCh chan<- QueueOperation) {
 
 	//make channel for receiving peer updates
-	peerUpdateCh := make(chan PeerUpdate)
+	peerUpdateCh := make(chan PeerUpdate, 1)
 
 	//make channel for enableling transmitter for peer update
-	peerTxEnableCh := make(chan bool)
+	peerTxEnableCh := make(chan bool, 1)
 
 	//goroutines for receiving and transmitting peerupdates
 	go TransmitterPeers(10808, elevatorID, peerTxEnableCh, peersTransmitMessageCh)
-	go ReceiverPeers(10808, peerUpdateCh, updatePeersOnQueueCh)
+	go ReceiverPeers(elevatorID, 10808, peerUpdateCh, updatePeersOnQueueCh)
 
 	//channels for sending and receiving custom data types, message for queueupdate
 
-	broadcastTransmitMessageCh := make(chan QueueOperation)
-	broadcastReceiveMessageCh := make(chan QueueOperation)
+	broadcastTransmitMessageCh := make(chan QueueOperation, 1)
+	broadcastReceiveMessageCh := make(chan QueueOperation, 1)
 
 	//goroutines for transmitting and receiving custom data types
-	go TransmitterBcast(30008, messageSentCh, broadcastTransmitMessageCh)
-	go ReceiverBcast(30008, broadcastReceiveMessageCh)
+	go TransmitterBcast(32345, messageSentCh, broadcastTransmitMessageCh)
+	go ReceiverBcast(32345, broadcastReceiveMessageCh)
 
 	for {
 		select {
 		case peerUpdate := <-peerUpdateCh:
 			updateNumberOfPeers(peerUpdate, updateQueueSizeCh)
-		case messageGoingOut:= <- outgoingMessageCh:
+		case messageGoingOut := <-outgoingMessageCh:
 			broadcastTransmitMessageCh <- messageGoingOut
-		case messageGoingIn:= <- broadcastReceiveMessageCh:
-			incomingMessageCh <-messageGoingIn
+		case messageGoingIn := <-broadcastReceiveMessageCh:
+			if messageGoingIn.ElevatorId != elevatorID {
+				fmt.Printf("Dette legges inn i incomingMSG: ID: %s , isAdd: %t , floor: %d, button %d\n", messageGoingIn.ElevatorId, messageGoingIn.IsAddOrder, messageGoingIn.Floor, messageGoingIn.Button)
+				incomingMessageCh <- messageGoingIn
+			}
 		}
 	}
 }
@@ -53,7 +56,6 @@ func InitializeNetwork() string {
 	return id
 }
 
-
 func updateNumberOfPeers(peerUpdate PeerUpdate, updateQueueSizeCh chan<- NewOrLostPeer) {
 	var p NewOrLostPeer
 	for i := range peerUpdate.Lost {
@@ -61,9 +63,9 @@ func updateNumberOfPeers(peerUpdate PeerUpdate, updateQueueSizeCh chan<- NewOrLo
 		p.IsNew = false
 		updateQueueSizeCh <- p
 	}
-	if peerUpdate.New != ""{
+	if peerUpdate.New != "" {
 		p.Id = peerUpdate.New
-		p.IsNew = true 
+		p.IsNew = true
 		updateQueueSizeCh <- p
 	}
 	fmt.Printf("Peer update:\n")

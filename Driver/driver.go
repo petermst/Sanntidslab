@@ -9,9 +9,9 @@ import (
 
 var lastFloorIndicator int = -1
 
-var lampSetChannelMatrix = [N_FLOORS][N_BUTTONS]int{}
+var lampSetChannelMatrix [N_FLOORS][N_BUTTONS]int
 
-func RunDriver(id string, setButtonIndicatorCh chan ButtonIndicator, setMotorDirectionCh <-chan int, startDoorTimerCh <-chan bool, eventElevatorStuckCh chan<- bool, eventAtFloorCh chan<- int, eventDoorTimeoutCh chan<- bool) {
+func RunDriver(id string, setButtonIndicatorCh chan ButtonIndicator, setMotorDirectionCh <-chan int, startDoorTimerCh <-chan bool, eventElevatorStuckCh chan<- bool, eventAtFloorCh chan<- int, eventDoorTimeoutCh chan<- bool, calcOptimalElevatorCh chan<- Order, updateQueueCh chan<- QueueOperation) {
 
 	checkTickerCh := time.NewTicker(5 * time.Millisecond).C
 
@@ -19,14 +19,14 @@ func RunDriver(id string, setButtonIndicatorCh chan ButtonIndicator, setMotorDir
 	elevatorStuckTimer.Stop()
 
 	for {
-
+		//fmt.Println(lampSetChannelMatrix)
 		select {
 		case lamp := <-setButtonIndicatorCh:
 			ElevSetButtonLamp(lamp.Button, lamp.Floor, lamp.Value)
 			lampSetChannelMatrix[lamp.Floor][lamp.Button] = lamp.Value
 		case <-checkTickerCh:
 			checkButtonsPressed(calcOptimalElevatorCh)
-			reached := checkFloorArrival(eventAtFloor)
+			reached := checkFloorArrival(eventAtFloorCh)
 			if reached {
 				elevatorStuckTimer.Reset(10 * time.Second)
 			}
@@ -83,16 +83,16 @@ func setDoor(doorOpen int) {
 
 func InitializeElevator() int {
 	ElevInit()
-	ElevSetMotorDirection(-1)
+	ElevSetMotorDirection(MOTOR_DOWN)
 	var initfloor int
 	for {
 		initfloor = ElevGetFloorSensorSignal()
 		if initfloor != -1 {
-			ElevSetMotorDirection(0)
+			ElevSetMotorDirection(MOTOR_IDLE)
 			ElevSetFloorIndicator(ElevGetFloorSensorSignal())
 			lastFloorIndicator = initfloor
 			fmt.Println("\nDriver successfully initialized\n")
-			return -1
+			return initfloor
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
