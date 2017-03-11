@@ -59,6 +59,6 @@ func eventNewDirection(id string, state State, directionAndFloor []int, startDoo
 			return STATE_MOVING
 		}
 	}
-	fmt.Printf("eventND returnerer: %d\n", state)
+	//fmt.Printf("eventND returnerer: %d\n", state)
 	return state
 }

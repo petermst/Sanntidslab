@@ -1,25 +1,19 @@
 package Network
 
 import (
-	"../conn"
+	. "../Def"
 	"fmt"
 	"net"
 	"sort"
 	"time"
 )
 
-type PeerUpdate struct {
-	Peers []string
-	New   string
-	Lost  []string
-}
-
 const interval = 100 * time.Millisecond
 const timeout = time.Second
 
 func TransmitterPeers(port int, id string, transmitEnable <-chan bool) {
 
-	conn := conn.DialBroadcastUDP(port)
+	conn := DialBroadcastUDP(port)
 	addr, _ := net.ResolveUDPAddr("udp4", fmt.Sprintf("255.255.255.255:%d", port))
 
 	enable := true
@@ -40,7 +34,7 @@ func ReceiverPeers(port int, peerUpdateCh chan<- PeerUpdate) {
 	var p PeerUpdate
 	lastSeen := make(map[string]time.Time)
 
-	conn := conn.DialBroadcastUDP(port)
+	conn := DialBroadcastUDP(port)
 
 	for {
 		updated := false

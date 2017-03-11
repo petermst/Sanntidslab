@@ -11,7 +11,9 @@ var lastFloorIndicator int = -1
 
 var lampSetChannelMatrix [N_FLOORS][N_BUTTONS]int
 
-func RunDriver(id string, setButtonIndicatorCh chan ButtonIndicator, setMotorDirectionCh <-chan int, startDoorTimerCh <-chan bool, eventElevatorStuckCh chan<- bool, eventAtFloorCh chan<- int, eventDoorTimeoutCh chan<- bool, calcOptimalElevatorCh chan<- Order, updateQueueCh chan<- QueueOperation) {
+var doorOpen bool = false
+
+func RunDriver(id string, setButtonIndicatorCh chan ButtonIndicator, setMotorDirectionCh <-chan int, startDoorTimerCh <-chan bool, eventElevatorStuckCh chan<- bool, eventAtFloorCh chan<- int, eventDoorTimeoutCh chan<- bool, calcOptimalElevatorCh chan<- Order, updateQueueCh chan<- QueueOperation, isDoorOpenCh <-chan bool, isDoorOpenResponseCh chan<- bool) {
 
 	checkTickerCh := time.NewTicker(5 * time.Millisecond).C
 
@@ -35,7 +37,10 @@ func RunDriver(id string, setButtonIndicatorCh chan ButtonIndicator, setMotorDir
 			if dir != 0 {
 				elevatorStuckTimer.Reset(10 * time.Second)
 			}
+		case <-isDoorOpenCh:
+			isDoorOpenResponseCh <- doorOpen
 		case <-startDoorTimerCh:
+			doorOpen = true
 			elevatorStuckTimer.Stop()
 
 			setDoor(DOOR_OPEN)
@@ -46,6 +51,7 @@ func RunDriver(id string, setButtonIndicatorCh chan ButtonIndicator, setMotorDir
 			go func() {
 				<-doorTimer.C
 				setDoor(DOOR_CLOSE)
+				doorOpen = false
 				eventDoorTimeoutCh <- true
 			}()
 

@@ -29,25 +29,25 @@ func RunNetwork(elevatorID string, updateQueueSizeCh chan<- NewOrLostPeer, messa
 	receiveQueueUpdate := make(chan QueueOperation, 1)
 
 	//goroutines for transmitting and receiving custom data types
-	go TransmitterBcast(32345, messageSentCh, copyTransmitQueueUpdate, transmitQueueUpdate, transmitDriverStateUpdate)
-	go ReceiverBcast(32345, receiveQueueUpdate, receiveDriverStateUpdate)
+	go TransmitterBcast(31345, messageSentCh, copyTransmitQueueUpdate, transmitQueueUpdate, transmitDriverStateUpdate)
+	go ReceiverBcast(31345, receiveQueueUpdate, receiveDriverStateUpdate)
 
 	for {
 		select {
 		case peerUpdate := <-peerUpdateCh:
-			updateNumberOfPeers(peerUpdate, updateQueueSizeCh)
-		case driverstateOutgoing := <- outgoingDriverStateUpdateCh:
+			updateNumberOfPeers(elevatorID, peerUpdate, updateQueueSizeCh)
+		case driverstateOutgoing := <-outgoingDriverStateUpdateCh:
 			transmitDriverStateUpdate <- driverstateOutgoing
-		case driverStateIncoming := <- receiveDriverStateUpdate:
+		case driverStateIncoming := <-receiveDriverStateUpdate:
 			incomingDriverStateUpdateCh <- driverStateIncoming
-		case queueUpdateOutgoing := <- outgoingQueueUpdateCh:
+		case queueUpdateOutgoing := <-outgoingQueueUpdateCh:
 			transmitQueueUpdate <- queueUpdateOutgoing
 			copyTransmitQueueUpdate <- queueUpdateOutgoing
 		case queueUpdateIncoming := <-receiveQueueUpdate:
-			if queueUpdateIncoming.ElevatorId != elevatorID {
-				fmt.Printf("Dette legges inn i incomingMSG: ID: %s , isAdd: %t , floor: %d, button %d\n", messageGoingIn.ElevatorId, messageGoingIn.IsAddOrder, messageGoingIn.Floor, messageGoingIn.Button)
-				incomingQueueUpdateCh <- queueUpdateIncoming
-			}
+			//if queueUpdateIncoming.ElevatorId != elevatorID {
+			fmt.Printf("Dette legges inn i incomingMSG: ID: %s , isAdd: %t , floor: %d, button %d\n", queueUpdateIncoming.ElevatorId, queueUpdateIncoming.IsAddOrder, queueUpdateIncoming.Floor, queueUpdateIncoming.Button)
+			incomingQueueUpdateCh <- queueUpdateIncoming
+			//}
 		}
 	}
 }
@@ -65,7 +65,7 @@ func InitializeNetwork() string {
 	return id
 }
 
-func updateNumberOfPeers(peerUpdate PeerUpdate, updateQueueSizeCh chan<- NewOrLostPeer) {
+func updateNumberOfPeers(id string, peerUpdate PeerUpdate, updateQueueSizeCh chan<- NewOrLostPeer) {
 	var p NewOrLostPeer
 	for i := range peerUpdate.Lost {
 		p.Id = peerUpdate.Lost[i]
@@ -75,7 +75,11 @@ func updateNumberOfPeers(peerUpdate PeerUpdate, updateQueueSizeCh chan<- NewOrLo
 	if peerUpdate.New != "" {
 		p.Id = peerUpdate.New
 		p.IsNew = true
-		updateQueueSizeCh <- p
+		if peerUpdate.New != id {
+			updateQueueSizeCh <- p
+
+		}
+
 	}
 	fmt.Printf("Peer update:\n")
 	fmt.Printf("  Peers:    %q\n", peerUpdate.Peers)

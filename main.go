@@ -11,34 +11,37 @@ import (
 
 func main() {
 	initFloor := InitializeElevator()
+	fmt.Printf("initfloor er: %d\n", initFloor)
 
 	id := InitializeNetwork()
 
 	fmt.Printf("Dette er min ID: %s\n", id)
 
-	setMotorDirectionCh := make(chan int, 1)              //Driver <- FSM
-	startDoorTimerCh := make(chan bool, 1)                //Driver <- FSM
-	setButtonIndicatorCh := make(chan ButtonIndicator, 1) //Driver <- Queue
-	eventElevatorStuckCh := make(chan bool, 1)            //FSM <- Driver
-	eventAtFloorCh := make(chan int, 1)                   //FSM <- Driver
-	eventDoorTimeoutCh := make(chan bool, 1)              //FSM <- Driver
-	nextDirectionCh := make(chan []int, 1)                //FSM <- Queue
-	calcOptimalElevatorCh := make(chan Order, 1)          //Queue <- Driver
-	shouldStopCh := make(chan int, 1)                     //Queue <- FSM
-	getNextDirectionCh := make(chan bool, 1)              //Queue <- FSM
-	elevatorStuckUpdateQueueCh := make(chan bool, 1)      //Queue <- FSM
-	updateQueueCh := make(chan QueueOperation, 1)         //Queue <- Driver
-	messageSentCh := make(chan QueueOperation, 1)         //Queue <- Network
-	updateQueueSizeCh := make(chan NewOrLostPeer, 1)      //Queue <- Network
-	incomingQueueUpdateCh := make(chan QueueOperation, 1)     //Queue <- Network
-	outgoingQueueUpdateCh := make(chan QueueOperation, 1)     //Network <- Queue
-	incomingDriverStateUpdateCh := make(chan DriverState, 1)	//Queue <- Network
-	outgoingDriverStateUpdateCh := make(chan DriverState, 1)	//Network <- Queue
+	setMotorDirectionCh := make(chan int, 1)                 //Driver <- FSM
+	startDoorTimerCh := make(chan bool, 1)                   //Driver <- FSM
+	setButtonIndicatorCh := make(chan ButtonIndicator, 1)    //Driver <- Queue
+	eventElevatorStuckCh := make(chan bool, 1)               //FSM <- Driver
+	eventAtFloorCh := make(chan int, 1)                      //FSM <- Driver
+	eventDoorTimeoutCh := make(chan bool, 1)                 //FSM <- Driver
+	nextDirectionCh := make(chan []int, 1)                   //FSM <- Queue
+	calcOptimalElevatorCh := make(chan Order, 1)             //Queue <- Driver
+	shouldStopCh := make(chan int, 1)                        //Queue <- FSM
+	getNextDirectionCh := make(chan bool, 1)                 //Queue <- FSM
+	elevatorStuckUpdateQueueCh := make(chan bool, 1)         //Queue <- FSM
+	updateQueueCh := make(chan QueueOperation, 1)            //Queue <- Driver
+	messageSentCh := make(chan QueueOperation, 1)            //Queue <- Network
+	updateQueueSizeCh := make(chan NewOrLostPeer, 1)         //Queue <- Network
+	incomingQueueUpdateCh := make(chan QueueOperation, 1)    //Queue <- Network
+	outgoingQueueUpdateCh := make(chan QueueOperation, 1)    //Network <- Queue
+	incomingDriverStateUpdateCh := make(chan DriverState, 1) //Queue <- Network
+	outgoingDriverStateUpdateCh := make(chan DriverState, 1) //Network <- Queue
+	isDoorOpenCh := make(chan bool, 1)                       //Driver <- Queue
+	isDoorOpenResponseCh := make(chan bool, 1)               //Queue <- Driver
 
-	go RunDriver(id, setButtonIndicatorCh, setMotorDirectionCh, startDoorTimerCh, eventElevatorStuckCh, eventAtFloorCh, eventDoorTimeoutCh, calcOptimalElevatorCh, updateQueueCh)
+	go RunDriver(id, setButtonIndicatorCh, setMotorDirectionCh, startDoorTimerCh, eventElevatorStuckCh, eventAtFloorCh, eventDoorTimeoutCh, calcOptimalElevatorCh, updateQueueCh, isDoorOpenCh, isDoorOpenResponseCh)
 	go RunFSM(id, setMotorDirectionCh, startDoorTimerCh, eventElevatorStuckCh, eventAtFloorCh, nextDirectionCh, shouldStopCh, eventDoorTimeoutCh, getNextDirectionCh, elevatorStuckUpdateQueueCh)
-	go RunQueue(id, initFloor, calcOptimalElevatorCh, updateQueueCh, updateQueueSizeCh, shouldStopCh, setButtonIndicatorCh, messageSentCh, nextDirectionCh, getNextDirectionCh, peersTransmitMessageCh, elevatorStuckUpdateQueueCh, outgoingQueueUpdateCh, incomingQueueUpdateCh, outgoingDriverStateUpdateCh, incomingDriverStateUpdateCh)
-	go RunNetwork(id, updateQueueSizeCh, peersTransmitMessageCh, messageSentCh, outgoingQueueUpdateCh, incomingQueueUpdateCh, outgoingDriverStateUpdateCh, incomingDriverStateUpdateCh)
+	go RunNetwork(id, updateQueueSizeCh, messageSentCh, outgoingQueueUpdateCh, incomingQueueUpdateCh, outgoingDriverStateUpdateCh, incomingDriverStateUpdateCh)
+	go RunQueue(id, initFloor, calcOptimalElevatorCh, updateQueueCh, updateQueueSizeCh, shouldStopCh, setButtonIndicatorCh, messageSentCh, nextDirectionCh, getNextDirectionCh, elevatorStuckUpdateQueueCh, outgoingQueueUpdateCh, incomingQueueUpdateCh, outgoingDriverStateUpdateCh, incomingDriverStateUpdateCh, isDoorOpenCh, isDoorOpenResponseCh)
 
 	/*
 		for {

@@ -14,5 +14,3 @@ scp -r /home/student/Group29 student@129.241.187.159:group29
 
 # Remove directory
 rm -rf lampp
-
-161
