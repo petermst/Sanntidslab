@@ -7,10 +7,10 @@ import (
 type State int
 
 const (
-	STATE_IDLE State = 0
-	STATE_MOVING State = 1
+	STATE_IDLE      State = 0
+	STATE_MOVING    State = 1
 	STATE_DOOR_OPEN State = 2
-	STATE_STUCK State = 3
+	STATE_STUCK     State = 3
 )
 
 const (
@@ -21,7 +21,7 @@ const (
 const (
 	MOTOR_DOWN int = -1
 	MOTOR_IDLE int = 0
-	MOTOR_UP int = 1
+	MOTOR_UP   int = 1
 )
 
 const (
