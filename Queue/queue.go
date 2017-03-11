@@ -29,6 +29,10 @@ func RunQueue(id string, initFloor int, calcOptimalElevatorCh <-chan Order, upda
 	driverStates.States[id] = driverStateList
 	driverStates.Mux.Unlock()
 
+	removeOrderRedistributedCh := make(chan QueueOperation, 1)
+	recalculateCostCh := make(chan Order, 1)
+	sendBackupInternalQueue := make(chan QueueOperation, 1)
+
 	for {
 		select {
 		case floor := <-shouldStopCh:
@@ -52,6 +56,12 @@ func RunQueue(id string, initFloor int, calcOptimalElevatorCh <-chan Order, upda
 			fmt.Println("4\n")
 			updateQueue(id, sentMessageOperation, queue, getNextDirectionCh, isDoorOpenCh, isDoorOpenResponseCh)
 			updateButtonIndicators(id, sentMessageOperation, setButtonIndicatorCh)
+		case newOrderToCalculate := <- recalculateCostCh:
+			calculateOptimalElevator(id, driverStates, newOrderToCalculate, outgoingQueueUpdateCh)
+		case messageToSend := <- removeOrderRedistributedCh:
+			outgoingQueueUpdateCh <- messageToSend
+		case internalOrder := <- sendBackupInternalQueue:
+			outgoingQueueUpdateCh <- internalOrder
 		case <-getNextDirectionCh:
 			fmt.Println("5\n")
 			nextDirection(id, queue, driverStates, outgoingDriverStateUpdateCh, nextDirectionCh)
@@ -133,18 +143,28 @@ func updateQueue(id string, operation QueueOperation, queue QueueMap, getNextDir
 
 func updateQueueSize(id string, queue QueueMap, driverStates DriverStatesMap, peer NewOrLostPeer) {
 	if peer.IsNew {
-		tempQueue := make([][]bool, N_FLOORS)
-		for i := range tempQueue {
-			tempQueue[i] = make([]bool, N_BUTTONS)
+		update := true
+		for key,_ := range queue.Queue{
+			if key == id {
+				update = false
+			}
 		}
-		queue.Mux.Lock()
-		queue.Queue[peer.Id] = tempQueue
-		queue.Mux.Unlock()
-		driverStates.Mux.Lock()
-		driverStates.States[peer.Id] = []int{1, -1}
-		driverStates.Mux.Unlock()
+		if update {
+			tempQueue := make([][]bool, N_FLOORS)
+			for i := range tempQueue {
+				tempQueue[i] = make([]bool, N_BUTTONS)
+			}
+			queue.Mux.Lock()
+			queue.Queue[peer.Id] = tempQueue
+			queue.Mux.Unlock()
+			driverStates.Mux.Lock()
+			driverStates.States[peer.Id] = []int{1, -1}
+			driverStates.Mux.Unlock()
+		}
+		
 	} else {
 		//Redistribute orders here
+
 		driverStates.Mux.Lock()
 		delete(driverStates.States, peer.Id)
 		driverStates.Mux.Unlock()
@@ -329,3 +349,25 @@ func nextDirection(id string, queue QueueMap, driverStates DriverStatesMap, outg
 		nextDirectionCh <- []int{updateDirection, currentFloor}
 	}
 }
+
+
+func redistribudeOrders(id string, queue Queue, recalculateCostCh chan<- Order, removeOrderRedistributedCh chan<- QueueOperation) {
+	updated bool
+	for floor := 0; floor < N_FLOORS; floor++ {
+		updated = false
+		for button := 0;button < 2; button++{
+			queue.Mux.Lock()
+			if queue.Queue[id][floor][button] {
+				recalculateCostCh <- Order{floor, button}
+				updated = true
+			}
+		}
+		if updated{
+			removeOrderRedistributedCh <- QueueOperation{false, id, floor, 0}
+		}
+	}
+}
+
+
+
+
