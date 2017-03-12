@@ -30,6 +30,9 @@ func RunFSM(id string, setMotorDirectionCh chan int, startDoorTimerCh chan bool,
 func eventAtFloor(state State, floor int, shouldStopCh chan<- int) State {
 	switch state {
 	case STATE_MOVING:
+		fallthrough
+	case STATE_STUCK:
+		fmt.Println("Shouldstop satt\n")
 		shouldStopCh <- floor
 	default:
 		return state
@@ -48,6 +51,8 @@ func eventDoorTimeout(state State) State {
 
 func eventNewDirection(id string, state State, directionAndFloor []int, startDoorTimerCh chan<- bool) State {
 	switch state {
+	case STATE_STUCK:
+		return STATE_MOVING
 	case STATE_MOVING:
 		fallthrough
 	case STATE_IDLE:
@@ -56,6 +61,7 @@ func eventNewDirection(id string, state State, directionAndFloor []int, startDoo
 			startDoorTimerCh <- true
 			return STATE_DOOR_OPEN
 		} else {
+			fmt.Println("STATE_MOVING\n")
 			return STATE_MOVING
 		}
 	}

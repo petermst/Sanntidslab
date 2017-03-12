@@ -29,10 +29,16 @@ const (
 	DOOR_OPEN      = 1
 )
 
+const (
+	IS_STOPPED int = 1
+	IS_MOVING = 0
+)
+
 type DriverState struct {
 	Id        string
 	LastFloor int
 	Direction int
+	IsStopped int
 }
 
 type NewOrLostPeer struct {

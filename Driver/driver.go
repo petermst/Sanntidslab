@@ -36,12 +36,13 @@ func RunDriver(id string, setButtonIndicatorCh chan ButtonIndicator, setMotorDir
 			ElevSetMotorDirection(dir)
 			if dir != 0 {
 				elevatorStuckTimer.Reset(10 * time.Second)
+			} else {
+				elevatorStuckTimer.Stop()
 			}
 		case <-isDoorOpenCh:
 			isDoorOpenResponseCh <- doorOpen
 		case <-startDoorTimerCh:
 			doorOpen = true
-			elevatorStuckTimer.Stop()
 
 			setDoor(DOOR_OPEN)
 			doorTimer := time.NewTimer(time.Second * 3)
@@ -74,6 +75,7 @@ func checkButtonsPressed(calcOptimalElevatorCh chan<- Order) {
 func checkFloorArrival(eventAtFloorCh chan<- int) bool {
 	curFloorIndicator := ElevGetFloorSensorSignal()
 	if curFloorIndicator != -1 && lastFloorIndicator == -1 {
+		
 		ElevSetFloorIndicator(curFloorIndicator)
 		eventAtFloorCh <- curFloorIndicator
 		lastFloorIndicator = curFloorIndicator
