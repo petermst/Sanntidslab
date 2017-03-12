@@ -73,3 +73,8 @@ type PeerUpdate struct {
 	New   string
 	Lost  []string
 }
+
+type Redistribute struct{
+	Id string
+	ShouldDelete bool
+}
