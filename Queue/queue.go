@@ -278,9 +278,12 @@ func calculateOptimalElevator(id string, driverStates DriverStatesMap, order Ord
 			driverStates.Mux.Lock()
 			curFloor := driverStates.States[elevID][0]
 			curDir := driverStates.States[elevID][1]
+			curIsStopped := driverStates.States[elevID][2]
 			driverStates.Mux.Unlock()
 			tempCost := 0
-			if (curDir == order.Button+1) || (curDir == order.Button-2) {
+			if (curIsStopped == 1) && (order.Floor == curFloor) {
+				tempCost = 0
+			} else if (curDir == order.Button+1) || (curDir == order.Button-2) {
 				if curDir*(order.Floor-curFloor) > 0 {
 					tempCost = curDir * (order.Floor - curFloor)
 				} else {
@@ -288,9 +291,8 @@ func calculateOptimalElevator(id string, driverStates DriverStatesMap, order Ord
 				}
 			} else if (curDir == order.Button) || (curDir == order.Button-1) {
 				tempCost = (curDir+1)*n_moves - curDir*(curFloor+order.Floor)
-			} else {
-				//FEIL!!
 			}
+			//Legge til ekstra kostnad hvis heis har mange ordre?
 			if tempCost < lowestCost {
 				lowestCostID = elevID
 				lowestCost = tempCost
