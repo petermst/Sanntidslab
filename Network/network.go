@@ -45,7 +45,7 @@ func RunNetwork(elevatorID string, updateQueueSizeCh chan<- NewOrLostPeer, messa
 			copyTransmitQueueUpdate <- queueUpdateOutgoing
 		case queueUpdateIncoming := <-receiveQueueUpdate:
 			//if queueUpdateIncoming.ElevatorId != elevatorID {
-			fmt.Printf("Dette legges inn i incomingMSG: ID: %s , isAdd: %t , floor: %d, button %d\n", queueUpdateIncoming.ElevatorId, queueUpdateIncoming.IsAddOrder, queueUpdateIncoming.Floor, queueUpdateIncoming.Button)
+			//fmt.Printf("Dette legges inn i incomingMSG: ID: %s , isAdd: %t , floor: %d, button %d\n", queueUpdateIncoming.ElevatorId, queueUpdateIncoming.IsAddOrder, queueUpdateIncoming.Floor, queueUpdateIncoming.Button)
 			incomingQueueUpdateCh <- queueUpdateIncoming
 			//}
 		}

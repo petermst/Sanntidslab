@@ -39,21 +39,15 @@ func RunQueue(id string, initFloor int, calcOptimalElevatorCh <-chan Order, upda
 	for {
 		select {
 		case floor := <-shouldStopCh:
-			fmt.Println("Shouldstop lest\n")
 			shouldStop(id, floor, queue, driverStates, nextDirectionCh)
 			driverStates.Mux.Lock()
+			fmt.Printf("Setter driverstates til floor: %d\n", floor)
 			driverStates.States[id][0] = floor
 			outgoingDriverStateUpdateCh <- DriverState{id, floor, driverStates.States[id][1], driverStates.States[id][2]}
 			driverStates.Mux.Unlock()
 		case queueUpdateToSend := <-updateQueueCh:
-			fmt.Printf("Dette er floor på ordre som blir sendt %d\n", queueUpdateToSend.Floor)
 			outgoingQueueUpdateCh <- queueUpdateToSend
-		case peer := <-updateQueueSizeCh:
-			updateQueueSize(id, queue, driverStates, peer, redistributeOrdersForIdCh)
-			outgoingDriverStateUpdateCh <- DriverState{id, driverStates.States[id][0], driverStates.States[id][1], driverStates.States[id][2]}
-			if peer.IsNew {
-				go sendCurrentQueue(queue, peer.Id, outgoingQueueUpdateCh)
-			}
+
 		case receivedMessageOperation := <-incomingQueueUpdateCh:
 			updateQueue(id, receivedMessageOperation, queue, getNextDirectionCh, isDoorOpenCh, isDoorOpenResponseCh)
 			updateButtonIndicators(id, receivedMessageOperation, setButtonIndicatorCh)
@@ -61,7 +55,7 @@ func RunQueue(id string, initFloor int, calcOptimalElevatorCh <-chan Order, upda
 			updateQueue(id, sentMessageOperation, queue, getNextDirectionCh, isDoorOpenCh, isDoorOpenResponseCh)
 			updateButtonIndicators(id, sentMessageOperation, setButtonIndicatorCh)
 		case newOrderToCalculate := <-recalculateCostCh:
-			calculateOptimalElevator(id, driverStates, newOrderToCalculate, outgoingQueueUpdateCh)
+			calculateOptimalElevator(id, queue, driverStates, newOrderToCalculate, outgoingQueueUpdateCh)
 		case messageToSend := <-removeOrderRedistributedCh:
 			outgoingQueueUpdateCh <- messageToSend
 		case <-getNextDirectionCh:
@@ -71,27 +65,30 @@ func RunQueue(id string, initFloor int, calcOptimalElevatorCh <-chan Order, upda
 		case <-elevatorStuckCh:
 			driverStates.Mux.Lock()
 			driverStates.States[id][0] = 100
-			nextDirectionCh <- []int{0, 1}
+			nextDirectionCh <- []int{MOTOR_IDLE, 1}
 			outgoingDriverStateUpdateCh <- DriverState{id, driverStates.States[id][0], driverStates.States[id][1], driverStates.States[id][2]}
 			driverStates.Mux.Unlock()
 			redistributeOrdersForIdCh <- Redistribute{id, false}
 			go func() {
-				time.Sleep(10*time.Second)
+				time.Sleep(10 * time.Second)
 				nextDirectionCh <- []int{MOTOR_DOWN, driverStates.States[id][0]}
 				driverStates.States[id][1] = MOTOR_DOWN
 				driverStates.States[id][2] = IS_MOVING
 			}()
-
+		case peer := <-updateQueueSizeCh:
+			updateQueueSize(id, queue, driverStates, peer, redistributeOrdersForIdCh)
+			outgoingDriverStateUpdateCh <- DriverState{id, driverStates.States[id][0], driverStates.States[id][1], driverStates.States[id][2]}
+			if peer.IsNew {
+				go sendCurrentQueue(queue, peer.Id, outgoingQueueUpdateCh)
+			}
 		case calc := <-calcOptimalElevatorCh:
-			calculateOptimalElevator(id, driverStates, calc, outgoingQueueUpdateCh)
+			calculateOptimalElevator(id, queue, driverStates, calc, outgoingQueueUpdateCh)
 		case updatedDriverState := <-incomingDriverStateUpdateCh:
-			fmt.Printf("isKeyInDriverstates er før løkka: %t\n", isKeyInDriverstates)
-			for key, _ := range driverStates.States {
+			for key := range driverStates.States {
 				if updatedDriverState.Id == key {
 					isKeyInDriverstates = true
 				}
 			}
-			fmt.Printf("isKeyInDriverstates: %t\n", isKeyInDriverstates)
 			if !isKeyInDriverstates {
 				driverStates.Mux.Lock()
 				driverStates.States[updatedDriverState.Id] = []int{updatedDriverState.LastFloor, updatedDriverState.Direction, updatedDriverState.IsStopped}
@@ -105,7 +102,6 @@ func RunQueue(id string, initFloor int, calcOptimalElevatorCh <-chan Order, upda
 				isKeyInDriverstates = false
 			}
 		}
-		fmt.Printf("Driverstates er:\n Floor: %d\n Direction: %d\n IsStopped: %d\n", driverStates.States[id][0], driverStates.States[id][1], driverStates.States[id][2])
 	}
 }
 
@@ -115,8 +111,6 @@ func updateQueue(id string, operation QueueOperation, queue QueueMap, getNextDir
 		if !queue.Queue[operation.ElevatorId][operation.Floor][operation.Button] {
 			queue.Queue[operation.ElevatorId][operation.Floor][operation.Button] = operation.IsAddOrder
 
-			fmt.Printf("antallet i køen er: %d\n", inQueue)
-
 			if operation.ElevatorId == id {
 				inQueue++
 				if inQueue == 1 {
@@ -124,14 +118,13 @@ func updateQueue(id string, operation QueueOperation, queue QueueMap, getNextDir
 					doorOpen := <-isDoorOpenResponseCh
 					if !doorOpen {
 						getNextDirectionCh <- true
-						fmt.Println("Ingen i kø, utfører ordre")
 					}
 				}
 			}
 		}
 		queue.Mux.Unlock()
 	} else {
-		for elevID, _ := range queue.Queue {
+		for elevID := range queue.Queue {
 			for i := 0; i < 2; i++ {
 				queue.Mux.Lock()
 				if queue.Queue[elevID][operation.Floor][i] {
@@ -153,15 +146,14 @@ func updateQueue(id string, operation QueueOperation, queue QueueMap, getNextDir
 		}
 		queue.Mux.Unlock()
 	}
-	for elevID, _ := range queue.Queue {
-		fmt.Printf("Elevator ID: %s\n", elevID)
+	/*for elevID := range queue.Queue {
 		for floor := N_FLOORS - 1; floor >= 0; floor-- {
 			queue.Mux.Lock()
 			fmt.Printf("%t\n", queue.Queue[elevID][floor])
 			queue.Mux.Unlock()
 		}
 		fmt.Println("\n")
-	}
+	}*/
 }
 
 func updateQueueSize(id string, queue QueueMap, driverStates DriverStatesMap, peer NewOrLostPeer, redistributeOrdersForIdCh chan<- Redistribute) {
@@ -177,17 +169,21 @@ func updateQueueSize(id string, queue QueueMap, driverStates DriverStatesMap, pe
 	} else {
 		if peer.Id != id {
 			driverStates.Mux.Lock()
-		delete(driverStates.States, peer.Id)
-		driverStates.Mux.Unlock()
-		redistributeOrdersForIdCh <- Redistribute{peer.Id, true}
+			delete(driverStates.States, peer.Id)
+			driverStates.Mux.Unlock()
+			redistributeOrdersForIdCh <- Redistribute{peer.Id, true}
+			fmt.Printf("redistributeOrdersForIdCh blir satt med id: %s\n", peer.Id)
+			for key := range driverStates.States {
+				fmt.Printf("Dette er id i driverStates: %s\n", key)
+			}
 		}
 	}
 }
 
 func sendCurrentQueue(queue QueueMap, newPeerId string, outgoingQueueUpdateCh chan<- QueueOperation) {
 	queue.Mux.Lock()
-	for elevID, _ := range queue.Queue {
-		if !(elevID == newPeerId){
+	for elevID := range queue.Queue {
+		if !(elevID == newPeerId) {
 			for floor := 0; floor < N_FLOORS; floor++ {
 				for button := 0; button < N_BUTTONS; button++ {
 					if queue.Queue[elevID][floor][button] {
@@ -201,7 +197,6 @@ func sendCurrentQueue(queue QueueMap, newPeerId string, outgoingQueueUpdateCh ch
 }
 
 func shouldStop(id string, floor int, queue QueueMap, driverStates DriverStatesMap, nextDirectionCh chan<- []int) {
-	fmt.Printf("Shouldstop kjøres med floor: %d\n", floor)
 	driverStates.Mux.Lock()
 	currentDirection := driverStates.States[id][1]
 	driverStates.Mux.Unlock()
@@ -262,44 +257,56 @@ func updateButtonIndicators(id string, operation QueueOperation, setButtonIndica
 	}
 }
 
-func calculateOptimalElevator(id string, driverStates DriverStatesMap, order Order, outgoingQueueUpdateCh chan<- QueueOperation) {
-	for element, _ := range driverStates.States {
-		fmt.Printf("Elevator ID: %s\n", element)
-		fmt.Printf("Driverstates: %d\n\n", driverStates.States[element])
-	}
+func calculateOptimalElevator(id string, queue QueueMap, driverStates DriverStatesMap, order Order, outgoingQueueUpdateCh chan<- QueueOperation) {
 
 	lowestCost := 1000
 	lowestCostID := ""
-	n_moves := N_FLOORS - 1
 	if order.Button == 2 {
 		lowestCostID = id
 	} else {
-		for elevID, _ := range driverStates.States {
+		for elevID := range driverStates.States {
 			driverStates.Mux.Lock()
 			curFloor := driverStates.States[elevID][0]
 			curDir := driverStates.States[elevID][1]
 			curIsStopped := driverStates.States[elevID][2]
 			driverStates.Mux.Unlock()
 			tempCost := 0
+
+			if curDir*(order.Floor-curFloor) > 0 {
+				tempCost = 2 * curDir * (order.Floor - curFloor)
+			} else if curDir*(order.Floor-curFloor) < 0 {
+				tempCost = 2 * curDir * (curFloor - order.Floor)
+			} else {
+				for b := 0; b < N_BUTTONS; b++ {
+					queue.Mux.Lock()
+					if queue.Queue[elevID][order.Floor][b] {
+						tempCost = 0
+					}
+					queue.Mux.Unlock()
+				}
+			}
+			for f := 0; f < N_FLOORS; f++ {
+				for b := 0; b < N_BUTTONS; b++ {
+					queue.Mux.Lock()
+					if queue.Queue[elevID][f][b] {
+						tempCost += 1
+					}
+					queue.Mux.Unlock()
+				}
+			}
 			if (curIsStopped == 1) && (order.Floor == curFloor) {
 				tempCost = 0
-			} else if (curDir == order.Button+1) || (curDir == order.Button-2) {
-				if curDir*(order.Floor-curFloor) > 0 {
-					tempCost = curDir * (order.Floor - curFloor)
-				} else {
-					tempCost = 2*n_moves + curDir*(order.Floor-curFloor)
-				}
-			} else if (curDir == order.Button) || (curDir == order.Button-1) {
-				tempCost = (curDir+1)*n_moves - curDir*(curFloor+order.Floor)
 			}
-			//Legge til ekstra kostnad hvis heis har mange ordre?
-			if tempCost < lowestCost {
+			if tempCost == 0 {
+				outgoingQueueUpdateCh <- QueueOperation{true, elevID, order.Floor, order.Button}
+				return
+			} else if tempCost < lowestCost {
 				lowestCostID = elevID
 				lowestCost = tempCost
 			}
+
 		}
 	}
-	fmt.Printf("Optimal elevator: %s, floor: %d, button: %d\n", lowestCostID, order.Floor, order.Button)
 	outgoingQueueUpdateCh <- QueueOperation{true, lowestCostID, order.Floor, order.Button}
 }
 
@@ -311,6 +318,10 @@ func nextDirection(id string, queue QueueMap, driverStates DriverStatesMap, outg
 	updateDirection := 5
 	orderUnder := false
 	orderOver := false
+
+	if currentFloor == 100 {
+		return
+	}
 
 	fmt.Printf("floor: %d\n", currentFloor)
 	for button := 0; button < N_BUTTONS; button++ {
@@ -380,26 +391,21 @@ func nextDirection(id string, queue QueueMap, driverStates DriverStatesMap, outg
 			driverStates.Mux.Unlock()
 		}
 		nextDirectionCh <- []int{updateDirection, currentFloor}
-		
+
 	}
 }
 
 func redistributeOrders(id string, redistribute Redistribute, queue QueueMap, recalculateCostCh chan<- Order, removeOrderRedistributedCh chan<- QueueOperation) {
-	var updated bool
 	for floor := 0; floor < N_FLOORS; floor++ {
-		updated = false
 		for button := 0; button < 2; button++ {
 			queue.Mux.Lock()
 			if queue.Queue[redistribute.Id][floor][button] {
 				recalculateCostCh <- Order{floor, button}
-				updated = true
 			}
-		}
-		if updated {
-			removeOrderRedistributedCh <- QueueOperation{false, redistribute.Id, floor, 0}
+			queue.Mux.Unlock()
 		}
 	}
-	if redistribute.ShouldDelete && (id != redistribute.Id){
+	if redistribute.ShouldDelete && (id != redistribute.Id) {
 		queue.Mux.Lock()
 		delete(queue.Queue, redistribute.Id)
 		queue.Mux.Unlock()

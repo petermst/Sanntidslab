@@ -31,7 +31,7 @@ const (
 
 const (
 	IS_STOPPED int = 1
-	IS_MOVING = 0
+	IS_MOVING      = 0
 )
 
 type DriverState struct {
@@ -80,7 +80,7 @@ type PeerUpdate struct {
 	Lost  []string
 }
 
-type Redistribute struct{
-	Id string
+type Redistribute struct {
+	Id           string
 	ShouldDelete bool
 }

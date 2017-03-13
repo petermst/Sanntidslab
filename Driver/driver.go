@@ -75,7 +75,7 @@ func checkButtonsPressed(calcOptimalElevatorCh chan<- Order) {
 func checkFloorArrival(eventAtFloorCh chan<- int) bool {
 	curFloorIndicator := ElevGetFloorSensorSignal()
 	if curFloorIndicator != -1 && lastFloorIndicator == -1 {
-		
+
 		ElevSetFloorIndicator(curFloorIndicator)
 		eventAtFloorCh <- curFloorIndicator
 		lastFloorIndicator = curFloorIndicator
