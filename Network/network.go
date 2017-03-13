@@ -3,11 +3,15 @@ package Network
 import (
 	. "../Def"
 	"fmt"
-	"os"
-	//"time"
+	//"os"
 )
 
-func RunNetwork(elevatorID string, updateQueueSizeCh chan<- NewOrLostPeer, messageSentCh chan<- QueueOperation, outgoingQueueUpdateCh <-chan QueueOperation, incomingQueueUpdateCh chan<- QueueOperation, outgoingDriverStateUpdateCh <-chan DriverState, incomingDriverStateUpdateCh chan<- DriverState) {
+/*
+Credit to Anders Rønning Petersen
+From https://github.com/TTK4145/Network-go
+*/
+
+func RunNetwork(id string, chQN ChannelsQueueNetwork) {
 
 	//make channel for receiving peer updates
 	peerUpdateCh := make(chan PeerUpdate, 1)
@@ -16,38 +20,38 @@ func RunNetwork(elevatorID string, updateQueueSizeCh chan<- NewOrLostPeer, messa
 	peerTxEnableCh := make(chan bool, 1)
 
 	//goroutines for receiving and transmitting peerupdates
-	go TransmitterPeers(10808, elevatorID, peerTxEnableCh)
+	go TransmitterPeers(10808, id, peerTxEnableCh)
 	go ReceiverPeers(10808, peerUpdateCh)
 
 	//channels for sending and receiving custom data types, message for queue update and driverstate update
+	transmitDriverStateUpdateCh := make(chan DriverState, 1)
+	receiveDriverStateUpdateCh := make(chan DriverState, 1)
 
-	transmitDriverStateUpdate := make(chan DriverState, 1)
-	receiveDriverStateUpdate := make(chan DriverState, 1)
-
-	transmitQueueUpdate := make(chan QueueOperation, 1)
-	copyTransmitQueueUpdate := make(chan QueueOperation, 1)
-	receiveQueueUpdate := make(chan QueueOperation, 1)
+	transmitQueueUpdateCh := make(chan QueueOperation, 1)
+	copyTransmitQueueUpdateCh := make(chan QueueOperation, 1)
+	receiveQueueUpdateCh := make(chan QueueOperation, 1)
 
 	//goroutines for transmitting and receiving custom data types
-	go TransmitterBcast(31345, messageSentCh, copyTransmitQueueUpdate, transmitQueueUpdate, transmitDriverStateUpdate)
-	go ReceiverBcast(31345, receiveQueueUpdate, receiveDriverStateUpdate)
+	go TransmitterBcast(31345, chQN.MessageSentCh, copyTransmitQueueUpdateCh, transmitQueueUpdateCh, transmitDriverStateUpdateCh)
+	go ReceiverBcast(31345, receiveQueueUpdateCh, receiveDriverStateUpdateCh)
 
 	for {
 		select {
 		case peerUpdate := <-peerUpdateCh:
-			updateNumberOfPeers(elevatorID, peerUpdate, updateQueueSizeCh)
-		case driverstateOutgoing := <-outgoingDriverStateUpdateCh:
-			transmitDriverStateUpdate <- driverstateOutgoing
-		case driverStateIncoming := <-receiveDriverStateUpdate:
-			incomingDriverStateUpdateCh <- driverStateIncoming
-		case queueUpdateOutgoing := <-outgoingQueueUpdateCh:
-			transmitQueueUpdate <- queueUpdateOutgoing
-			copyTransmitQueueUpdate <- queueUpdateOutgoing
-		case queueUpdateIncoming := <-receiveQueueUpdate:
-			//if queueUpdateIncoming.ElevatorId != elevatorID {
-			//fmt.Printf("Dette legges inn i incomingMSG: ID: %s , isAdd: %t , floor: %d, button %d\n", queueUpdateIncoming.ElevatorId, queueUpdateIncoming.IsAddOrder, queueUpdateIncoming.Floor, queueUpdateIncoming.Button)
-			incomingQueueUpdateCh <- queueUpdateIncoming
-			//}
+			updateNumberOfPeers(id, peerUpdate, chQN.UpdateQueueSizeCh)
+
+		case driverstateOutgoing := <-chQN.OutgoingDriverStateUpdateCh:
+			transmitDriverStateUpdateCh <- driverstateOutgoing
+
+		case driverStateIncoming := <-receiveDriverStateUpdateCh:
+			chQN.IncomingDriverStateUpdateCh <- driverStateIncoming
+
+		case queueUpdateOutgoing := <-chQN.OutgoingQueueUpdateCh:
+			transmitQueueUpdateCh <- queueUpdateOutgoing
+			copyTransmitQueueUpdateCh <- queueUpdateOutgoing
+
+		case queueUpdateIncoming := <-receiveQueueUpdateCh:
+			chQN.IncomingQueueUpdateCh <- queueUpdateIncoming
 		}
 	}
 }
@@ -60,7 +64,7 @@ func InitializeNetwork() string {
 			fmt.Println(err)
 			localIP = "DISCONNECTED"
 		}
-		id = fmt.Sprintf("peer-%s-%d", localIP, os.Getpid())
+		id = fmt.Sprintf("peer-%s", localIP)
 	}
 	return id
 }
@@ -68,12 +72,12 @@ func InitializeNetwork() string {
 func updateNumberOfPeers(id string, peerUpdate PeerUpdate, updateQueueSizeCh chan<- NewOrLostPeer) {
 	var p NewOrLostPeer
 	for i := range peerUpdate.Lost {
-		p.Id = peerUpdate.Lost[i]
+		p.ElevatorId = peerUpdate.Lost[i]
 		p.IsNew = false
 		updateQueueSizeCh <- p
 	}
 	if peerUpdate.New != "" {
-		p.Id = peerUpdate.New
+		p.ElevatorId = peerUpdate.New
 		p.IsNew = true
 		if peerUpdate.New != id {
 			updateQueueSizeCh <- p

@@ -8,10 +8,15 @@ import (
 	"time"
 )
 
+/*
+Credit to Anders Rønning Petersen
+From https://github.com/TTK4145/Network-go
+*/
+
 const interval = 100 * time.Millisecond
 const timeout = time.Second
 
-func TransmitterPeers(port int, id string, transmitEnable <-chan bool) {
+func TransmitterPeers(port int, id string, transmitEnableCh <-chan bool) {
 
 	conn := DialBroadcastUDP(port)
 	addr, _ := net.ResolveUDPAddr("udp4", fmt.Sprintf("255.255.255.255:%d", port))
@@ -19,7 +24,7 @@ func TransmitterPeers(port int, id string, transmitEnable <-chan bool) {
 	enable := true
 	for {
 		select {
-		case enable = <-transmitEnable:
+		case enable = <-transmitEnableCh:
 		case <-time.After(interval):
 		}
 		if enable {
@@ -69,7 +74,7 @@ func ReceiverPeers(port int, peerUpdateCh chan<- PeerUpdate) {
 		if updated {
 			p.Peers = make([]string, 0, len(lastSeen))
 
-			for k, _ := range lastSeen {
+			for k := range lastSeen {
 				p.Peers = append(p.Peers, k)
 			}
 

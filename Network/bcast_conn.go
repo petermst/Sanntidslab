@@ -7,6 +7,11 @@ import (
 )
 
 /*
+Credit to Anders Rønning Petersen
+From https://github.com/TTK4145/Network-go
+*/
+
+/*
 I have not found a way to create a proper broadcast socket on Windows (one that
 doesn't give an "address already in use" error). This is not a problem with
 Windows or sockets, but some quirk of the Go library. It is impossible to set

@@ -9,9 +9,14 @@ import (
 	"strings"
 )
 
+/*
+Credit to Anders Rønning Petersen
+From https://github.com/TTK4145/Network-go
+*/
+
 // Encodes received values from `chans` into type-tagged JSON, then broadcasts
 // it on `port`
-func TransmitterBcast(port int, messageSentCh chan<- QueueOperation, copyTransmitQueueUpdate <-chan QueueOperation, chans ...interface{}) {
+func TransmitterBcast(port int, messageSentCh chan<- QueueOperation, copyTransmitQueueUpdateCh <-chan QueueOperation, chans ...interface{}) {
 	checkArgs(chans...)
 
 	n := 0
@@ -34,11 +39,12 @@ func TransmitterBcast(port int, messageSentCh chan<- QueueOperation, copyTransmi
 	for {
 		chosen, value, _ := reflect.Select(selectCases)
 		buf, _ := json.Marshal(value.Interface())
-		conn.WriteTo([]byte(typeNames[chosen]+string(buf)), addr)
+		for i := 0; i < 3; i++ {
+			conn.WriteTo([]byte(typeNames[chosen]+string(buf)), addr)
+		}
 		if chosen == 0 {
-			messageSent := <-copyTransmitQueueUpdate
+			messageSent := <-copyTransmitQueueUpdateCh
 			messageSentCh <- messageSent
-			fmt.Printf("Dette legges inn i messageSent: ID: %s , isAdd: %t , floor: %d, button %d\n", messageSent.ElevatorId, messageSent.IsAddOrder, messageSent.Floor, messageSent.Button)
 		}
 	}
 }
@@ -58,7 +64,6 @@ func ReceiverBcast(port int, chans ...interface{}) {
 			if strings.HasPrefix(string(buf[0:n])+"{", typeName) {
 				v := reflect.New(T)
 				json.Unmarshal(buf[len(typeName):n], v.Interface())
-
 				reflect.Select([]reflect.SelectCase{{
 					Dir:  reflect.SelectSend,
 					Chan: reflect.ValueOf(ch),

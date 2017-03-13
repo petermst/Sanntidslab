@@ -5,6 +5,11 @@ import (
 	"strings"
 )
 
+/*
+Credit to Anders Rønning Petersen
+From https://github.com/TTK4145/Network-go
+*/
+
 var localIP string
 
 func LocalIP() (string, error) {
