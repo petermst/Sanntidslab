@@ -2,7 +2,6 @@ package Queue
 
 import (
 	. "../Def"
-	"fmt"
 	"time"
 )
 
@@ -33,7 +32,7 @@ func RunQueue(id string, initFloor int, chQN ChannelsQueueNetwork, chQF Channels
 
 	removeOrderRedistributedCh := make(chan QueueOperation, 1)
 	recalculateCostCh := make(chan Order, 1)
-	redistributeOrdersForIdCh := make(chan Redistribute, 1)
+	redistributeOrdersForIdCh := make(chan string, 1)
 
 	for {
 
@@ -71,7 +70,7 @@ func RunQueue(id string, initFloor int, chQN ChannelsQueueNetwork, chQF Channels
 			chQF.NextDirectionCh <- []int{MOTOR_IDLE, 1}
 			chQN.OutgoingDriverStateUpdateCh <- DriverState{id, driverStates.States[id][0], driverStates.States[id][1], driverStates.States[id][2]}
 			driverStates.Mux.Unlock()
-			redistributeOrdersForIdCh <- Redistribute{id, false}
+			redistributeOrdersForIdCh <- id
 
 			go func() {
 				time.Sleep(10 * time.Second)
@@ -81,7 +80,9 @@ func RunQueue(id string, initFloor int, chQN ChannelsQueueNetwork, chQF Channels
 			}()
 
 		case redistribute := <-redistributeOrdersForIdCh:
-			go redistributeOrders(id, redistribute, queue, recalculateCostCh, removeOrderRedistributedCh)
+			if len(driverStates.States) > 1 {
+				go redistributeOrders(id, redistribute, queue, recalculateCostCh, removeOrderRedistributedCh)
+			}
 
 		case peer := <-chQN.UpdateQueueSizeCh:
 			updateQueueSize(id, queue, driverStates, peer, redistributeOrdersForIdCh)
@@ -140,16 +141,11 @@ func updateQueue(id string, operation QueueOperation, queue QueueMap, getNextDir
 		}
 		queue.Mux.Unlock()
 	}
-	/*for elevID := range queue.Queue {
-		fmt.Printf("Queue for id: %s\n", elevID)
-		for f := 0; f < N_FLOORS; f++ {
-			fmt.Printf("%t\n", queue.Queue[elevID][f])
-		}
-	}*/
 }
 
-func updateQueueSize(id string, queue QueueMap, driverStates DriverStatesMap, peer NewOrLostPeer, redistributeOrdersForIdCh chan<- Redistribute) {
+func updateQueueSize(id string, queue QueueMap, driverStates DriverStatesMap, peer NewOrLostPeer, redistributeOrdersForIdCh chan<- string) {
 	alreadyInQueue := false
+
 	if peer.IsNew {
 		for elevID := range queue.Queue {
 			if elevID == peer.ElevatorId {
@@ -171,13 +167,12 @@ func updateQueueSize(id string, queue QueueMap, driverStates DriverStatesMap, pe
 			driverStates.Mux.Lock()
 			delete(driverStates.States, peer.ElevatorId)
 			driverStates.Mux.Unlock()
-			redistributeOrdersForIdCh <- Redistribute{peer.ElevatorId, true}
+			redistributeOrdersForIdCh <- peer.ElevatorId
 		}
 	}
 }
 
 func sendCurrentQueue(queue QueueMap, newPeerId string, outgoingQueueUpdateCh chan<- QueueOperation) {
-	fmt.Println("\n")
 	queue.Mux.Lock()
 	for elevID := range queue.Queue {
 		for floor := 0; floor < N_FLOORS; floor++ {
@@ -256,7 +251,7 @@ func updateButtonIndicators(id string, operation QueueOperation, setButtonIndica
 }
 
 func calculateOptimalElevator(id string, queue QueueMap, driverStates DriverStatesMap, order Order, outgoingQueueUpdateCh chan<- QueueOperation) {
-	lowestCost := 1000
+	lowestCost := 255
 	lowestCostID := ""
 
 	if order.Button == 2 {
@@ -283,6 +278,7 @@ func calculateOptimalElevator(id string, queue QueueMap, driverStates DriverStat
 					queue.Mux.Unlock()
 				}
 			}
+
 			for f := 0; f < N_FLOORS; f++ {
 				for b := 0; b < N_BUTTONS; b++ {
 					queue.Mux.Lock()
@@ -292,12 +288,15 @@ func calculateOptimalElevator(id string, queue QueueMap, driverStates DriverStat
 					queue.Mux.Unlock()
 				}
 			}
+
 			if (curIsStopped == 1) && (order.Floor == curFloor) {
 				tempCost = 0
 			}
+
 			if tempCost == 0 {
 				outgoingQueueUpdateCh <- QueueOperation{true, elevID, order.Floor, order.Button}
 				return
+
 			} else if tempCost < lowestCost {
 				lowestCostID = elevID
 				lowestCost = tempCost
@@ -314,7 +313,7 @@ func nextDirection(id string, queue QueueMap, driverStates DriverStatesMap, outg
 	currentFloor := driverStates.States[id][0]
 	driverStates.Mux.Unlock()
 	updated := false
-	updateDirection := 0
+	updateDirection := MOTOR_IDLE
 	orderUnder := false
 	orderOver := false
 
@@ -386,7 +385,7 @@ func nextDirection(id string, queue QueueMap, driverStates DriverStatesMap, outg
 	}
 
 	if updated {
-		if updateDirection != 0 {
+		if updateDirection != MOTOR_IDLE {
 			driverStates.Mux.Lock()
 			driverStates.States[id][1] = updateDirection
 			driverStates.States[id][2] = IS_MOVING
@@ -398,26 +397,21 @@ func nextDirection(id string, queue QueueMap, driverStates DriverStatesMap, outg
 	}
 }
 
-func redistributeOrders(id string, redistribute Redistribute, queue QueueMap, recalculateCostCh chan<- Order, removeOrderRedistributedCh chan<- QueueOperation) {
+func redistributeOrders(id string, redistributeId string, queue QueueMap, recalculateCostCh chan<- Order, removeOrderRedistributedCh chan<- QueueOperation) {
 	for floor := 0; floor < N_FLOORS; floor++ {
 		for button := 0; button < 2; button++ {
 			queue.Mux.Lock()
-			if queue.Queue[redistribute.ElevatorId][floor][button] {
+			if queue.Queue[redistributeId][floor][button] {
 				recalculateCostCh <- Order{floor, button}
 			}
 			queue.Mux.Unlock()
 		}
 	}
-	time.Sleep(20 * time.Millisecond)
-	/*if redistribute.ShouldDelete && (id != redistribute.ElevatorId) {
-		queue.Mux.Lock()
-		delete(queue.Queue, redistribute.ElevatorId)
-		queue.Mux.Unlock()
-	}*/
+
 	for floor := 0; floor < N_FLOORS; floor++ {
 		for button := 0; button < 2; button++ {
 			queue.Mux.Lock()
-			queue.Queue[redistribute.ElevatorId][floor][button] = false
+			queue.Queue[redistributeId][floor][button] = false
 			queue.Mux.Unlock()
 		}
 	}

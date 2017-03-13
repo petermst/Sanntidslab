@@ -76,15 +76,15 @@ func updateNumberOfPeers(id string, peerUpdate PeerUpdate, updateQueueSizeCh cha
 		p.IsNew = false
 		updateQueueSizeCh <- p
 	}
+
 	if peerUpdate.New != "" {
 		p.ElevatorId = peerUpdate.New
 		p.IsNew = true
 		if peerUpdate.New != id {
 			updateQueueSizeCh <- p
-
 		}
-
 	}
+
 	fmt.Printf("Peer update:\n")
 	fmt.Printf("  Peers:    %q\n", peerUpdate.Peers)
 	fmt.Printf("  New:      %q\n", peerUpdate.New)

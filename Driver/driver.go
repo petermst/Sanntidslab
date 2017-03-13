@@ -3,6 +3,7 @@ package Driver
 import (
 	. "../Def"
 	"fmt"
+	"os"
 	"time"
 )
 
@@ -16,7 +17,7 @@ func RunDriver(id string, chQD ChannelsQueueDriver, chFD ChannelsFSMDriver) {
 
 	checkTickerCh := time.NewTicker(5 * time.Millisecond).C
 
-	elevatorStuckTimer := time.NewTimer(10 * time.Second)
+	elevatorStuckTimer := time.NewTimer(7 * time.Second)
 	elevatorStuckTimer.Stop()
 
 	for {
@@ -30,13 +31,13 @@ func RunDriver(id string, chQD ChannelsQueueDriver, chFD ChannelsFSMDriver) {
 			checkButtonsPressed(chQD.CalcOptimalElevatorCh)
 			reached := checkFloorArrival(chFD.EventAtFloorCh)
 			if reached {
-				elevatorStuckTimer.Reset(10 * time.Second)
+				elevatorStuckTimer.Reset(7 * time.Second)
 			}
 
 		case dir := <-chFD.SetMotorDirectionCh:
 			ElevSetMotorDirection(dir)
 			if dir != 0 {
-				elevatorStuckTimer.Reset(10 * time.Second)
+				elevatorStuckTimer.Reset(7 * time.Second)
 			} else {
 				elevatorStuckTimer.Stop()
 			}
@@ -94,6 +95,18 @@ func InitializeElevator() int {
 	ElevInit()
 	ElevSetMotorDirection(MOTOR_DOWN)
 	var initfloor int
+	initializeTimer := time.NewTimer(7 * time.Second)
+	successfullyInitialized := make(chan bool)
+
+	go func() {
+		select {
+		case <-initializeTimer.C:
+			fmt.Println("\nError: Elevator cannot be initialized! \n")
+			os.Exit(1)
+		case <-successfullyInitialized:
+			initializeTimer.Stop()
+		}
+	}()
 
 	for {
 		initfloor = ElevGetFloorSensorSignal()
@@ -102,6 +115,7 @@ func InitializeElevator() int {
 			ElevSetFloorIndicator(ElevGetFloorSensorSignal())
 			lastFloorIndicator = initfloor
 			fmt.Println("\nDriver successfully initialized\n")
+			successfullyInitialized <- true
 			return initfloor
 		}
 		time.Sleep(10 * time.Millisecond)

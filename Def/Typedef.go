@@ -51,8 +51,3 @@ type PeerUpdate struct {
 	New   string
 	Lost  []string
 }
-
-type Redistribute struct {
-	ElevatorId   string
-	ShouldDelete bool
-}
